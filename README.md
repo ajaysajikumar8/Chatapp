@@ -38,9 +38,11 @@ npm run dev
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_URL` | PostgreSQL connection string (e.g., `postgresql://user:password@localhost:5432/chatdb`). **Note:** The database must be created before running migrations. Store this in `.env` file. |
 | `JWT_SECRET` | Secret used to sign JWT tokens |
 | `PORT` | Port the server listens on (default: `3000`) |
+
+> **Important**: Ensure PostgreSQL is running and the database specified in `DATABASE_URL` exists before running `npx prisma migrate dev`.
 
 ## Scripts
 
