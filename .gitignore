@@ -58,3 +58,5 @@ coverage/
 # ------------------------------
 tmp/
 temp/
+
+/src/generated/prisma
