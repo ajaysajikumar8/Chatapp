@@ -1,19 +1,25 @@
-// this file defines the authentication controller functions for handling user registration, login, and logout.
+// controllers/auth.controller.ts
 
-import type { Request, Response } from 'express';
+import type { Request, Response } from "express";
+import { registerUser, loginUser } from "../services/auth.service.js";
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { email, password, name } = req.body;
+        const { email, password, username } = req.body;
 
-        // TODO: Validate input
-        // TODO: Check if user exists
-        // TODO: Hash password
-        // TODO: Create user in database
+        // 🔹 Basic validation
+        if (!email || !password || !username) {
+            return res.status(400).json({ error: "All fields are required" });
+        }
 
-        res.status(201).json({ message: 'User registered successfully' });
-    } catch (error) {
-        res.status(500).json({ error: 'Registration failed' });
+        const result = await registerUser({ email, password, username });
+
+        return res.status(201).json({
+            message: "User registered successfully",
+            ...result,
+        });
+    } catch (error: any) {
+        return res.status(400).json({ error: error.message });
     }
 };
 
@@ -21,22 +27,26 @@ export const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body;
 
-        // TODO: Validate input
-        // TODO: Find user in database
-        // TODO: Verify password
-        // TODO: Generate JWT token
+        // 🔹 Validation
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email and password required" });
+        }
 
-        res.status(200).json({ message: 'Login successful', token: '' });
-    } catch (error) {
-        res.status(500).json({ error: 'Login failed' });
+        const result = await loginUser({ email, password });
+
+        return res.status(200).json({
+            message: "Login successful",
+            ...result,
+        });
+    } catch (error: any) {
+        return res.status(400).json({ error: error.message });
     }
 };
 
-export const logout = async (req: Request, res: Response) => {
+export const logout = async (_req: Request, res: Response) => {
     try {
-        // TODO: Implement logout logic (e.g., invalidate token)
-        res.status(200).json({ message: 'Logout successful' });
-    } catch (error) {
-        res.status(500).json({ error: 'Logout failed' });
+        return res.status(200).json({ message: "Logout successful" });
+    } catch {
+        return res.status(500).json({ error: "Logout failed" });
     }
 };
