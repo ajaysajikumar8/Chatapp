@@ -19,6 +19,6 @@ export const generateToken = (userId: string) => {
   return jwt.sign({ userId }, getJwtSecret(), options);
 };
 
-export const verifyToken = (token: string) => {
-  return jwt.verify(token, getJwtSecret());
+export const verifyToken = (token: string): { userId: string } => {
+  return jwt.verify(token, getJwtSecret()) as { userId: string };
 };
