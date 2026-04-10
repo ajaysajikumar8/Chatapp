@@ -115,3 +115,5 @@ A single server instance doesn't need Pub/Sub. Introducing Redis before it's nee
 
 **Message ordering**  
 Messages are ordered by `created_at` (DB-assigned server timestamp), not client timestamp, to prevent clock skew issues on mobile clients.
+
+test commit
