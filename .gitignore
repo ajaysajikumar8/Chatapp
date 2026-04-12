@@ -40,8 +40,6 @@ Thumbs.db
 # ------------------------------
 # Prisma
 # ------------------------------
-prisma/migrations/
-# (Optional: remove this line if you WANT migrations in git)
 
 # ------------------------------
 # TypeScript

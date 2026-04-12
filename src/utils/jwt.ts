@@ -8,7 +8,7 @@ const getJwtSecret = (): string => {
   return secret;
 };
 
-export const generateToken = (userId: string) => {
+export const generateToken = (id: string) => {
   const options: jwt.SignOptions = {};
   if (process.env.JWT_EXPIRES_IN) {
     options.expiresIn = process.env.JWT_EXPIRES_IN as NonNullable<
@@ -16,9 +16,9 @@ export const generateToken = (userId: string) => {
     >;
   }
 
-  return jwt.sign({ userId }, getJwtSecret(), options);
+  return jwt.sign({ id }, getJwtSecret(), options);
 };
 
-export const verifyToken = (token: string): { userId: string } => {
-  return jwt.verify(token, getJwtSecret()) as { userId: string };
+export const verifyToken = (token: string): { id: string } => {
+  return jwt.verify(token, getJwtSecret()) as { id: string };
 };

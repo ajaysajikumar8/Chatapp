@@ -7,11 +7,11 @@ import { generateToken } from "../utils/jwt.js";
 export const registerUser = async ({
     email,
     password,
-    username,
+    displayName,
 }: {
     email: string;
     password: string;
-    username: string;
+    displayName: string;
 }) => {
     // 🔹 Check existing user
     const existingUser = await prisma.user.findUnique({
@@ -29,7 +29,7 @@ export const registerUser = async ({
     const user = await prisma.user.create({
         data: {
             email,
-            username,
+            displayName,
             passwordHash,
         },
     });
@@ -42,7 +42,7 @@ export const registerUser = async ({
         user: {
             id: user.id,
             email: user.email,
-            username: user.username,
+            displayName: user.displayName,
         },
     };
 };
@@ -78,7 +78,7 @@ export const loginUser = async ({
         user: {
             id: user.id,
             email: user.email,
-            username: user.username,
+            displayName: user.displayName,
         },
     };
 };
