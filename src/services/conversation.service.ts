@@ -42,41 +42,49 @@ export const createConversationService = async (
     currentUserId: string,
     participantId: string
 ) => {
+    const isSelfConversation = currentUserId === participantId;
+    const expectedParticipantCount = isSelfConversation ? 1 : 2;
 
-    if (currentUserId === participantId) {
-        throw new Error("Cannot create conversation with yourself");
-    }
-
-    const existingConversation = await prisma.conversation.findFirst({
+    const existingConversations = await prisma.conversation.findMany({
         where: {
-            participants: {
-                every: {
-                    userId: {
-                        in: [currentUserId, participantId],
+            AND: [
+                {
+                    participants: {
+                        some: {
+                            userId: currentUserId,
+                        },
                     },
                 },
-            },
+                {
+                    participants: {
+                        some: {
+                            userId: participantId,
+                        },
+                    },
+                },
+            ],
         },
         include: {
             participants: true,
         },
     });
 
-    if (
-        existingConversation &&
-        existingConversation.participants.length === 2
-    ) {
-        return existingConversation;
+    const exactMatch = existingConversations.find(
+        (c) => c.participants.length === expectedParticipantCount
+    );
+
+    if (exactMatch) {
+        return exactMatch;
     }
 
+    const participantData = isSelfConversation
+        ? [{ userId: currentUserId }]
+        : [{ userId: currentUserId }, { userId: participantId }];
 
     const newConversation = await prisma.conversation.create({
         data: {
             participants: {
-                create: [
-                    { userId: currentUserId },
-                    { userId: participantId },
-                ],
+                create: participantData,
             },
         },
         include: {
