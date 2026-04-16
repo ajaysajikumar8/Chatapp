@@ -10,6 +10,7 @@ export const getUserConversations = async (req: Request, res: Response) => {
 
         return sendSuccess(res, "Conversations fetched successfully", conversations);
     } catch (error) {
+        console.error("Error in getUserConversations:", error);
         return sendError(res, "Failed to fetch conversations");
     }
 };
@@ -17,19 +18,23 @@ export const getUserConversations = async (req: Request, res: Response) => {
 export const createConversation = async (req: Request, res: Response) => {
     try {
         const currentUserId = req.user?.id;
-        const { participantId } = req.body;
+        const { participantId } = req.body || {};
 
         if (!participantId) {
             return sendError(res, "participantId is required", 400);
         }
 
-        const conversation = await createConversationService(
+        const { conversation, isNew } = await createConversationService(
             currentUserId!,
             participantId
         );
 
-        return sendSuccess(res, "Conversation created successfully", conversation, 200);
+        if (isNew) {
+            return sendSuccess(res, "Conversation created successfully", conversation, 201);
+        }
+        return sendSuccess(res, "Conversation already exists", conversation, 200);
     } catch (error) {
+        console.error("Error in createConversation:", error);
         return sendError(res, "Failed to create conversation", 500);
     }
 };

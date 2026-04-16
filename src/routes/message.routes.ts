@@ -1,12 +1,14 @@
-// src/routes/message.routes.ts
-// This file defines the routes for message-related operations, such as fetching messages for a conversation.
-
 import { Router } from 'express';
-import { getMessages } from '../controllers/message.controller.js';
+import { getMessages, sendMessage, updateMessage, deleteMessage } from '../controllers/message.controller.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
-// GET messages for a conversation
+router.use(authMiddleware);
+
 router.get('/:conversationId', getMessages);
+router.post('/:conversationId', sendMessage);
+router.put('/:id', updateMessage);
+router.delete('/:id', deleteMessage);
 
 export default router;

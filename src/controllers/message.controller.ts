@@ -1,55 +1,76 @@
-// Message controller CRUD handlers.
-
 import type { Request, Response } from 'express';
 import { sendSuccess, sendError } from '../utils/response.js';
-// TODO: Import Prisma client here
-// import { prisma } from '../lib/prisma.js';
+import {
+    getMessagesByConversationId,
+    createMessage,
+    updateMessageService,
+    deleteMessageService,
+} from '../services/message.service.js';
 
-export const getMessages = async (req: Request, res: Response): Promise<void> => {
+export const getMessages = async (req: Request<{ conversationId: string }>, res: Response): Promise<void> => {
     try {
-        // TODO: Fetch all messages for a conversation from the database
-        sendSuccess(res, "Messages fetched successfully", []);
-    } catch (error) {
-        sendError(res, 'Failed to fetch messages');
+        const userId = req.user!.id;
+        const { conversationId } = req.params;
+
+        const messages = await getMessagesByConversationId(conversationId, userId);
+        sendSuccess(res, "Messages fetched successfully", messages);
+    } catch (error: any) {
+        console.error("Error in getMessages:", error);
+        sendError(res, error.message || 'Failed to fetch messages', error.message?.includes('Unauthorized') ? 403 : 500);
     }
 };
 
-export const getMessageById = async (req: Request, res: Response): Promise<void> => {
+export const getMessageById = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    sendError(res, "Not implemented", 501);
+};
+
+export const sendMessage = async (req: Request<{ conversationId: string }>, res: Response): Promise<void> => {
     try {
+        const userId = req.user!.id;
+        const { conversationId } = req.params;
+        const { content } = req.body || {};
+
+        if (!content) {
+            sendError(res, "Content is required", 400);
+            return;
+        }
+
+        const message = await createMessage(conversationId, userId, content);
+        sendSuccess(res, "Message sent successfully", message, 201);
+    } catch (error: any) {
+        console.error("Error in sendMessage:", error);
+        sendError(res, error.message || 'Failed to send message', error.message?.includes('Unauthorized') ? 403 : 400);
+    }
+};
+
+export const updateMessage = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    try {
+        const userId = req.user!.id;
         const { id } = req.params;
-        // TODO: Fetch a single message by id from the database
-        // TODO: Return 404 if not found
-        sendSuccess(res, "Message fetched successfully", {});
-    } catch (error) {
-        sendError(res, 'Failed to fetch message');
+        const { content } = req.body || {};
+
+        if (!content) {
+            sendError(res, "Content is required", 400);
+            return;
+        }
+
+        const message = await updateMessageService(id, userId, content);
+        sendSuccess(res, "Message updated successfully", message);
+    } catch (error: any) {
+        console.error("Error in updateMessage:", error);
+        sendError(res, error.message || 'Failed to update message', error.message?.includes('Unauthorized') ? 403 : 400);
     }
 };
 
-export const sendMessage = async (req: Request, res: Response): Promise<void> => {
+export const deleteMessage = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     try {
-        // TODO: Create and save a new message using req.body
-        sendSuccess(res, "Message sent successfully", {}, 201);
-    } catch (error) {
-        sendError(res, 'Failed to send message', 400);
-    }
-};
-
-export const updateMessage = async (req: Request, res: Response): Promise<void> => {
-    try {
+        const userId = req.user!.id;
         const { id } = req.params;
-        // TODO: Find message by id and update it with req.body
-        sendSuccess(res, "Message updated successfully", {});
-    } catch (error) {
-        sendError(res, 'Failed to update message', 400);
-    }
-};
 
-export const deleteMessage = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { id } = req.params;
-        // TODO: Delete message by id from the database
-        sendSuccess(res, "Message deleted successfully", null, 204);
-    } catch (error) {
-        sendError(res, 'Failed to delete message');
+        await deleteMessageService(id, userId);
+        sendSuccess(res, "Message deleted successfully", null);
+    } catch (error: any) {
+        console.error("Error in deleteMessage:", error);
+        sendError(res, error.message || 'Failed to delete message', error.message?.includes('Unauthorized') ? 403 : 400);
     }
 };

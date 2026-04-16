@@ -74,7 +74,7 @@ export const createConversationService = async (
     );
 
     if (exactMatch) {
-        return exactMatch;
+        return { conversation: exactMatch, isNew: false };
     }
 
     const participantData = isSelfConversation
@@ -92,5 +92,5 @@ export const createConversationService = async (
         },
     });
 
-    return newConversation;
+    return { conversation: newConversation, isNew: true };
 };

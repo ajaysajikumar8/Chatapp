@@ -16,6 +16,7 @@ export const register = async (req: Request, res: Response) => {
         const result = await registerUser({ email, password, displayName });
         return sendSuccess(res, "User registered successfully", result, 201);
     } catch (error: any) {
+        console.error("Error in register:", error);
         return sendError(res, error.message, 400);
     }
 };
@@ -33,6 +34,7 @@ export const login = async (req: Request, res: Response) => {
 
         return sendSuccess(res, "Login successful", result);
     } catch (error: any) {
+        console.error("Error in login:", error);
         return sendError(res, error.message, 400);
     }
 };
@@ -40,7 +42,8 @@ export const login = async (req: Request, res: Response) => {
 export const logout = async (_req: Request, res: Response) => {
     try {
         return sendSuccess(res, "Logout successful", null);
-    } catch {
+    } catch (error) {
+        console.error("Error in logout:", error);
         return sendError(res, "Logout failed");
     }
 };
