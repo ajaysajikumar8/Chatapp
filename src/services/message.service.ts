@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { getIO } from "../socket/index.js";
 
 // Helper check to see if user is part of conversation
 export const checkUserInConversation = async (conversationId: string, userId: string) => {
@@ -44,7 +45,7 @@ export const createMessage = async (conversationId: string, senderId: string, co
         throw new Error("Unauthorized to access this conversation");
     }
 
-    return await prisma.message.create({
+    const newMessage = await prisma.message.create({
         data: {
             conversationId,
             senderId,
@@ -60,6 +61,19 @@ export const createMessage = async (conversationId: string, senderId: string, co
             },
         },
     });
+
+    const participants = await prisma.conversationParticipant.findMany({
+        where: { conversationId }
+    });
+    
+    const io = getIO();
+    participants.forEach((p) => {
+        if (p.userId !== senderId) {
+            io.to(p.userId).emit("new_message", newMessage);
+        }
+    });
+
+    return newMessage;
 };
 
 export const updateMessageService = async (messageId: string, senderId: string, content: string) => {
@@ -75,7 +89,7 @@ export const updateMessageService = async (messageId: string, senderId: string, 
         throw new Error("Unauthorized to edit this message");
     }
 
-    return await prisma.message.update({
+    const updatedMessage = await prisma.message.update({
         where: { id: messageId },
         data: { content },
         include: {
@@ -87,6 +101,19 @@ export const updateMessageService = async (messageId: string, senderId: string, 
             },
         },
     });
+
+    const participants = await prisma.conversationParticipant.findMany({
+        where: { conversationId: message.conversationId }
+    });
+    
+    const io = getIO();
+    participants.forEach((p) => {
+        if (p.userId !== senderId) {
+            io.to(p.userId).emit("message_updated", updatedMessage);
+        }
+    });
+
+    return updatedMessage;
 };
 
 export const deleteMessageService = async (messageId: string, senderId: string) => {
@@ -104,6 +131,17 @@ export const deleteMessageService = async (messageId: string, senderId: string) 
 
     await prisma.message.delete({
         where: { id: messageId },
+    });
+
+    const participants = await prisma.conversationParticipant.findMany({
+        where: { conversationId: message.conversationId }
+    });
+    
+    const io = getIO();
+    participants.forEach((p) => {
+        if (p.userId !== senderId) {
+            io.to(p.userId).emit("message_deleted", { messageId, conversationId: message.conversationId });
+        }
     });
 
     return true;
