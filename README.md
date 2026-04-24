@@ -1,73 +1,141 @@
-# React + TypeScript + Vite
+# Frontend — Chat Application
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Overview
 
-Currently, two official plugins are available:
+This is the frontend for a real-time chat application. It provides authentication, conversation management, and live messaging using WebSockets. The UI is designed to be responsive, fast, and minimal, with a focus on real-time user experience.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 19** — UI library
+- **TypeScript** — Type safety
+- **Tailwind CSS v4** — Styling (with CSS-based configuration)
+- **Zustand** — State management
+- **Socket.io Client** — Real-time communication
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Folder Structure
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+│
+├── components/        # Reusable UI components
+├── pages/             # Route-level pages (Auth, Chat, etc.)
+├── hooks/             # Custom React hooks
+├── store/             # Zustand state management
+├── services/          # API & socket logic
+├── utils/             # Helper functions
+├── types/             # TypeScript types/interfaces
+├── styles/            # Global styles & Tailwind v4 theme configuration
+│   └── index.css      # Entry point for all CSS and Tailwind variables
+│
+├── App.tsx
+├── main.tsx
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## State Management (Zustand)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Used for:
+
+- Auth state (user session, token)
+- Active conversation
+- Messages cache
+- Online users (future phase)
+
+Keep it minimal. Don’t turn this into Redux 2.0.
+
+---
+
+## Styling Strategy (Tailwind)
+
+### Global Styles
+
+Handled in `src/styles/index.css`. Use this file for:
+
+- **Tailwind v4 Configuration**: Define colors and fonts in the `@theme` block.
+- **CSS Resets**: Custom base styles or browser-specific fixes.
+- **Global Variables**: Theme-wide CSS variables.
+- **Scrollbar Styling**: Custom sleek scrollbars for chat windows.
+
+Everything else → Tailwind utility classes.
+
+### Component Styling
+
+- **Prefer Utility Classes**: Use inline Tailwind classes for 99% of styling.
+- **Reusable Components**: Extract repeated patterns into React components, not CSS classes.
+- **Avoid Custom CSS**: Do not create `.module.css` or large custom CSS files unless absolutely necessary.
+
+---
+
+## API Integration
+
+All API calls are handled in `services/`:
+
+- Auth APIs (login, register)
+- Conversations
+- Messages
+
+Use a centralized API client (e.g., Axios instance) for:
+
+- Base URL
+- Auth headers
+- Error handling
+
+---
+
+## WebSocket Integration
+
+- Initialize Socket.io client after authentication
+- Maintain a single connection instance
+- Handle:
+    - Incoming messages
+    - Message acknowledgements
+    - Reconnection logic (later phase)
+
+---
+
+## Environment Variables
+
+Create a `.env` file:
+
 ```
+VITE_API_BASE_URL=http://localhost:5000
+VITE_SOCKET_URL=http://localhost:5000
+```
+
+---
+
+## Running the Project
+
+```bash
+# install dependencies
+npm install
+
+# start development server
+npm run dev
+```
+
+---
+
+## Build
+
+```bash
+npm run build
+```
+
+---
+
+---
+
+## Development Notes
+
+- Keep components small and focused
+- Avoid premature abstraction
+- Optimize only when necessary
+- Prefer clarity over cleverness
+
+---
