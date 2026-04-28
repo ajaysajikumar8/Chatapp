@@ -17,6 +17,8 @@ export const getConversationsForUser = async (userId: string) => {
                             id: true,
                             displayName: true,
                             email: true,
+                            status: true,
+                            lastSeen: true,
                         },
                     },
                 },

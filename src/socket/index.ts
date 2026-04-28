@@ -1,6 +1,7 @@
 import { Server as SocketIOServer } from "socket.io";
 import type { Server as HTTPServer } from "http";
 import { verifyToken } from "../utils/jwt.js";
+import { prisma } from "../lib/prisma.js";
 
 let io: SocketIOServer;
 
@@ -29,17 +30,43 @@ export const initSocket = (server: HTTPServer) => {
         }
     });
 
-    io.on("connection", (socket) => {
-        console.log(`Socket connected: ${socket.id} (User: ${socket.data.user.id})`);
+    io.on("connection", async (socket) => {
+        const userId = socket.data.user.id;
+        console.log(`Socket connected: ${socket.id} (User: ${userId})`);
 
         // Force user to join a room named after their userId
-        socket.join(socket.data.user.id);
+        socket.join(userId);
         
-        socket.on("disconnect", () => {
-            console.log(`Socket disconnected: ${socket.id}`);
-        });
+        // Update presence to ONLINE
+        try {
+            await prisma.user.update({
+                where: { id: userId },
+                data: { status: "ONLINE" }
+            });
+            io.emit("user_presence_changed", { userId, status: "ONLINE" });
+        } catch (error) {
+            console.error("Error updating user presence to ONLINE:", error);
+        }
 
-        // Add additional event listeners here if necessary
+        socket.on("disconnect", async () => {
+            console.log(`Socket disconnected: ${socket.id}`);
+            // Check if user has other active connections
+            const matchingSockets = await io.in(userId).fetchSockets();
+            const isDisconnected = matchingSockets.length === 0;
+
+            if (isDisconnected) {
+                try {
+                    const lastSeen = new Date();
+                    await prisma.user.update({
+                        where: { id: userId },
+                        data: { status: "OFFLINE", lastSeen }
+                    });
+                    io.emit("user_presence_changed", { userId, status: "OFFLINE", lastSeen });
+                } catch (error) {
+                    console.error("Error updating user presence to OFFLINE:", error);
+                }
+            }
+        });
     });
 
     return io;
