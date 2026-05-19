@@ -15,10 +15,12 @@ datasource db {
 
 model User {
   id            String                    @id @default(cuid())
+  username      String                    @unique
   displayName   String                    @map("display_name")
   email         String                    @unique
   passwordHash  String                    @map("password_hash")
   status        String                    @default("OFFLINE")
+  isDiscoverable Boolean                  @default(true) @map("is_discoverable")
   lastSeen      DateTime?                 @map("last_seen")
   createdAt     DateTime                  @default(now()) @map("created_at")
   updatedAt     DateTime                  @updatedAt @map("updated_at")
@@ -26,6 +28,8 @@ model User {
 
   conversations ConversationParticipant[]
   messages      Message[]                 @relation("MessageSender")
+  blocksInitiated Block[]                 @relation("BlocksInitiated")
+  blocksReceived  Block[]                 @relation("BlocksReceived")
 
   @@map("users")
 }
@@ -64,4 +68,17 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker   User     @relation("BlocksInitiated", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
 }

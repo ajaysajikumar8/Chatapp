@@ -8,18 +8,25 @@ export const registerUser = async ({
     email,
     password,
     displayName,
+    username,
 }: {
     email: string;
     password: string;
     displayName: string;
+    username: string;
 }) => {
-    // 🔹 Check existing user
-    const existingUser = await prisma.user.findUnique({
-        where: { email },
+    // 🔹 Check existing user by email or username
+    const existingUser = await prisma.user.findFirst({
+        where: {
+            OR: [
+                { email },
+                { username }
+            ]
+        },
     });
 
     if (existingUser) {
-        throw new Error("User already exists");
+        throw new Error("User with that email or username already exists");
     }
 
     // 🔹 Hash password
@@ -29,6 +36,7 @@ export const registerUser = async ({
     const user = await prisma.user.create({
         data: {
             email,
+            username,
             displayName,
             passwordHash,
         },
@@ -42,6 +50,7 @@ export const registerUser = async ({
         user: {
             id: user.id,
             email: user.email,
+            username: user.username,
             displayName: user.displayName,
         },
     };
@@ -78,6 +87,7 @@ export const loginUser = async ({
         user: {
             id: user.id,
             email: user.email,
+            username: user.username,
             displayName: user.displayName,
         },
     };

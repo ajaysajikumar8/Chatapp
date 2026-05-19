@@ -6,14 +6,14 @@ import { sendSuccess, sendError } from "../utils/response.js";
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { email, password, displayName } = req.body;
+        const { email, password, displayName, username } = req.body;
 
         // 🔹 Basic validation
-        if (!email || !password || !displayName) {
+        if (!email || !password || !displayName || !username) {
             return sendError(res, "All fields are required", 400);
         }
 
-        const result = await registerUser({ email, password, displayName });
+        const result = await registerUser({ email, password, displayName, username });
         return sendSuccess(res, "User registered successfully", result, 201);
     } catch (error: any) {
         console.error("Error in register:", error);
