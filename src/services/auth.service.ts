@@ -15,11 +15,14 @@ export const registerUser = async ({
     displayName: string;
     username: string;
 }) => {
+    // 🔹 Normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+
     // 🔹 Check existing user by email or username
     const existingUser = await prisma.user.findFirst({
         where: {
             OR: [
-                { email },
+                { email: normalizedEmail },
                 { username }
             ]
         },
@@ -35,7 +38,7 @@ export const registerUser = async ({
     // 🔹 Create user
     const user = await prisma.user.create({
         data: {
-            email,
+            email: normalizedEmail,
             username,
             displayName,
             passwordHash,
@@ -63,9 +66,12 @@ export const loginUser = async ({
     email: string;
     password: string;
 }) => {
+    // 🔹 Normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+
     // 🔹 Find user
     const user = await prisma.user.findUnique({
-        where: { email },
+        where: { email: normalizedEmail },
     });
 
     if (!user) {

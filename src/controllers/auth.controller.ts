@@ -6,7 +6,12 @@ import { sendSuccess, sendError } from "../utils/response.js";
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { email, password, displayName, username } = req.body;
+        const { password, displayName, username } = req.body;
+        let { email } = req.body;
+
+        if (typeof email === "string") {
+            email = email.trim().toLowerCase();
+        }
 
         // 🔹 Basic validation
         if (!email || !password || !displayName || !username) {
@@ -23,7 +28,12 @@ export const register = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
     try {
-        const { email, password } = req.body;
+        const { password } = req.body;
+        let { email } = req.body;
+
+        if (typeof email === "string") {
+            email = email.trim().toLowerCase();
+        }
 
         // 🔹 Validation
         if (!email || !password) {
