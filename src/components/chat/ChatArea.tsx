@@ -33,11 +33,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   if (!conversation) {
     return (
-      <div className="hidden md:flex flex-1 items-center justify-center bg-slate-950 h-full">
+      <div className="hidden md:flex flex-1 items-center justify-center bg-bg-base h-full">
         <div className="text-center">
-          <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-800">
+          <div className="w-20 h-20 bg-bg-surface rounded-full flex items-center justify-center mx-auto mb-4 border border-border-subtle">
             <svg
-              className="w-10 h-10 text-slate-600"
+              className="w-10 h-10 text-text-subtle"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -50,8 +50,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               />
             </svg>
           </div>
-          <h3 className="text-xl font-medium text-slate-300">Your Messages</h3>
-          <p className="text-slate-500 mt-2">Select a conversation to start chatting</p>
+          <h3 className="text-xl font-medium text-text-base">Your Messages</h3>
+          <p className="text-text-subtle mt-2">Select a conversation to start chatting</p>
         </div>
       </div>
     );
@@ -64,42 +64,42 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     <div
       className={`${
         isVisible ? 'flex' : 'hidden'
-      } md:flex flex-col flex-1 bg-slate-950 h-full`}
+      } md:flex flex-col flex-1 bg-bg-base h-full`}
     >
       {/* Header */}
-      <div className="h-[73px] px-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 backdrop-blur-sm z-10 shrink-0">
+      <div className="h-[73px] px-4 border-b border-border-subtle flex items-center justify-between bg-bg-base/80 backdrop-blur-sm z-10 shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="md:hidden p-2 -ml-2 rounded-full hover:bg-slate-800 text-slate-300 transition-colors"
+            className="md:hidden p-2 -ml-2 rounded-full hover:bg-bg-surface-hover text-text-base transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           
           <div className="relative">
-            <div className="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-semibold border border-indigo-500/30">
+            <div className="w-10 h-10 rounded-full bg-primary/20 text-primary-light flex items-center justify-center font-semibold border border-primary/30">
               {participant.displayName.charAt(0).toUpperCase()}
             </div>
             {status === 'ONLINE' && (
-              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></div>
+              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-success border-2 border-bg-surface rounded-full"></div>
             )}
           </div>
           
           <div>
-            <h2 className="font-semibold text-slate-100">{participant.displayName}</h2>
-            <p className="text-xs text-slate-400 capitalize">
+            <h2 className="font-semibold text-text-base">{participant.displayName}</h2>
+            <p className="text-xs text-text-muted capitalize">
               {status?.toLowerCase()}
             </p>
           </div>
         </div>
         
-        <button className="p-2 rounded-full hover:bg-slate-800 text-slate-400 transition-colors">
+        <button className="p-2 rounded-full hover:bg-bg-surface-hover text-text-muted transition-colors">
           <MoreVertical className="w-5 h-5" />
         </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-950">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-bg-base">
         {messages.map((msg, index) => {
           const isMine = msg.senderId === currentUserId;
           const showAvatar = !isMine && (index === 0 || messages[index - 1].senderId !== msg.senderId);
@@ -114,7 +114,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {!isMine && (
                 <div className="shrink-0 w-8">
                   {showAvatar && (
-                    <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-medium border border-indigo-500/30">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 text-primary-light flex items-center justify-center text-xs font-medium border border-primary/30">
                       {participant.displayName.charAt(0).toUpperCase()}
                     </div>
                   )}
@@ -125,13 +125,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <div
                   className={`px-4 py-2.5 rounded-2xl text-sm ${
                     isMine
-                      ? 'bg-indigo-600 text-white rounded-tr-sm'
-                      : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700'
+                      ? 'bg-primary text-white rounded-tr-sm'
+                      : 'bg-bg-surface-hover text-text-base rounded-tl-sm border border-border-subtle'
                   }`}
                 >
                   {msg.content}
                 </div>
-                <span className="text-[10px] text-slate-500 mt-1 px-1">
+                <span className="text-[10px] text-text-subtle mt-1 px-1">
                   {new Date(msg.createdAt).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -145,9 +145,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-slate-950 border-t border-slate-800 shrink-0">
-        <div className="flex items-end gap-2 bg-slate-900 rounded-xl p-2 border border-slate-800 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all">
-          <button className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0">
+      <div className="p-4 bg-bg-base border-t border-border-subtle shrink-0">
+        <div className="flex items-end gap-2 bg-bg-surface rounded-xl p-2 border border-border-subtle focus-within:border-primary-light/50 focus-within:ring-1 focus-within:ring-primary-light/50 transition-all">
+          <button className="p-2 text-text-muted hover:text-primary-light hover:bg-bg-surface-hover rounded-lg transition-colors shrink-0">
             <ImageIcon className="w-5 h-5" />
           </button>
           
@@ -155,7 +155,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Type a message..."
-            className="flex-1 max-h-32 min-h-[40px] bg-transparent border-none focus:ring-0 text-slate-200 placeholder:text-slate-500 resize-none py-2 px-2 text-sm"
+            className="flex-1 max-h-32 min-h-[40px] bg-transparent border-none focus:ring-0 text-text-base placeholder:text-text-subtle resize-none py-2 px-2 text-sm"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -176,7 +176,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               }
             }}
             disabled={!inputText.trim()}
-            className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 text-white rounded-lg transition-colors shrink-0"
+            className="p-2 bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:hover:bg-primary text-white rounded-lg transition-colors shrink-0"
           >
             <Send className="w-4 h-4" />
           </button>

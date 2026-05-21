@@ -44,23 +44,23 @@ export const LoginPage: React.FC = () => {
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 200, damping: 10 }}
-              className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-indigo-500/20"
+              className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-primary/20"
             >
               <LogIn className="text-white w-8 h-8" />
             </motion.div>
             <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-            <p className="text-slate-400">Please enter your details to sign in</p>
+            <p className="text-text-muted">Please enter your details to sign in</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300 ml-1">Email Address</label>
+              <label className="text-sm font-medium text-text-base ml-1">Email Address</label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-text-subtle w-5 h-5" />
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value.toLowerCase())}
                   placeholder="name@example.com"
                   className="input-field !pl-14"
                   required
@@ -70,11 +70,11 @@ export const LoginPage: React.FC = () => {
 
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
-                <label className="text-sm font-medium text-slate-300">Password</label>
-                <a href="#" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Forgot password?</a>
+                <label className="text-sm font-medium text-text-base">Password</label>
+                <a href="#" className="text-xs text-primary-light hover:text-primary transition-colors">Forgot password?</a>
               </div>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-text-subtle w-5 h-5" />
                 <input
                   type="password"
                   value={password}
@@ -90,7 +90,7 @@ export const LoginPage: React.FC = () => {
               <motion.p
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="text-red-400 text-sm ml-1"
+                className="text-danger-light text-sm ml-1"
               >
                 {error}
               </motion.p>
@@ -130,9 +130,9 @@ export const LoginPage: React.FC = () => {
             </div>
           </div> */}
 
-          <p className="text-center mt-10 text-slate-400 text-sm">
+          <p className="text-center mt-10 text-text-muted text-sm">
             Don't have an account?{' '}
-            <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors underline underline-offset-4 decoration-indigo-400/30">
+            <Link to="/register" className="text-primary-light hover:text-primary font-medium transition-colors underline underline-offset-4 decoration-primary-light/30">
               Create one now
             </Link>
           </p>

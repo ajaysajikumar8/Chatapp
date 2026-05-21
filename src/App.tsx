@@ -14,7 +14,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30">
+      <div className="min-h-screen bg-bg-base text-text-base selection:bg-primary-light/30">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
