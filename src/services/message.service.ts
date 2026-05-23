@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { getIO } from "../socket/index.js";
+import { createConversationService } from "./conversation.service.js";
 
 // Helper check to see if user is part of conversation
 export const checkUserInConversation = async (conversationId: string, userId: string) => {
@@ -73,7 +74,48 @@ export const createMessage = async (conversationId: string, senderId: string, co
         }
     });
 
+    // Bump conversation updatedAt so sidebar sort by recency stays accurate
+    await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+    });
+
     return newMessage;
+};
+
+export const sendDirectMessageService = async (senderId: string, recipientId: string, content: string) => {
+    // 1. Get or create the conversation (sender is guaranteed to be a participant)
+    const { conversation } = await createConversationService(senderId, recipientId);
+
+    // 2. Create message directly — skip checkUserInConversation since we just
+    //    established participation above, avoiding a redundant DB round-trip.
+    const newMessage = await prisma.message.create({
+        data: { conversationId: conversation.id, senderId, content },
+        include: {
+            sender: {
+                select: { id: true, displayName: true, email: true },
+            },
+        },
+    });
+
+    // 3. Emit new_message to all other participants
+    const participants = await prisma.conversationParticipant.findMany({
+        where: { conversationId: conversation.id },
+    });
+    const io = getIO();
+    participants.forEach((p) => {
+        if (p.userId !== senderId) {
+            io.to(p.userId).emit('new_message', newMessage);
+        }
+    });
+
+    // 4. Update conversation updatedAt so sidebar sort stays accurate
+    await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+    });
+
+    return { conversation, message: newMessage };
 };
 
 export const updateMessageService = async (messageId: string, senderId: string, content: string) => {

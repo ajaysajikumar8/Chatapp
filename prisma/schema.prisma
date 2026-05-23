@@ -37,6 +37,7 @@ model User {
 model Conversation {
   id           String                    @id @default(cuid())
   createdAt    DateTime                  @default(now()) @map("created_at")
+  updatedAt    DateTime                  @default(now()) @updatedAt @map("updated_at")
 
   participants ConversationParticipant[]
   messages     Message[]
@@ -48,6 +49,7 @@ model ConversationParticipant {
   id             String       @id @default(cuid())
   conversationId String       @map("conversation_id")
   userId         String       @map("user_id")
+  lastReadAt     DateTime     @default(now()) @map("last_read_at")
 
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)

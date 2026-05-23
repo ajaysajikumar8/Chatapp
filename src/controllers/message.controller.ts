@@ -5,6 +5,7 @@ import {
     createMessage,
     updateMessageService,
     deleteMessageService,
+    sendDirectMessageService,
 } from '../services/message.service.js';
 
 export const getMessages = async (req: Request<{ conversationId: string }>, res: Response): Promise<void> => {
@@ -39,6 +40,25 @@ export const sendMessage = async (req: Request<{ conversationId: string }>, res:
         sendSuccess(res, "Message sent successfully", message, 201);
     } catch (error: any) {
         console.error("Error in sendMessage:", error);
+        sendError(res, error.message || 'Failed to send message', error.message?.includes('Unauthorized') ? 403 : 400);
+    }
+};
+
+export const sendDirectMessage = async (req: Request<{ userId: string }>, res: Response): Promise<void> => {
+    try {
+        const senderId = req.user!.id;
+        const recipientId = req.params.userId;
+        const { content } = req.body || {};
+
+        if (!content) {
+            sendError(res, "Content is required", 400);
+            return;
+        }
+
+        const result = await sendDirectMessageService(senderId, recipientId, content);
+        sendSuccess(res, "Message sent successfully", result, 201);
+    } catch (error: any) {
+        console.error("Error in sendDirectMessage:", error);
         sendError(res, error.message || 'Failed to send message', error.message?.includes('Unauthorized') ? 403 : 400);
     }
 };
