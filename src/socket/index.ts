@@ -67,6 +67,15 @@ export const initSocket = (server: HTTPServer) => {
                 }
             }
         });
+
+        // Typing indicators
+        socket.on("typing_start", ({ conversationId, recipientId }) => {
+            socket.to(recipientId).emit("typing_start", { conversationId, userId });
+        });
+
+        socket.on("typing_stop", ({ conversationId, recipientId }) => {
+            socket.to(recipientId).emit("typing_stop", { conversationId, userId });
+        });
     });
 
     return io;
