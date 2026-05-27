@@ -30,8 +30,22 @@ model User {
   messages      Message[]                 @relation("MessageSender")
   blocksInitiated Block[]                 @relation("BlocksInitiated")
   blocksReceived  Block[]                 @relation("BlocksReceived")
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  auth      String
+  p256dh    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
 }
 
 model Conversation {

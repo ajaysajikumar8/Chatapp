@@ -53,9 +53,9 @@ export const markConversationRead = async (req: Request<{ id: string }>, res: Re
             io.to(participantId).emit('messages_read', { conversationId, readBy: userId, readAt });
         });
 
-        return sendSuccess(res, 'Conversation marked as read', null);
+        sendSuccess(res, 'Conversation marked as read', null);
     } catch (error) {
         console.error('Error in markConversationRead:', error);
-        return sendError(res, 'Failed to mark conversation as read');
+        sendError(res, 'Failed to mark conversation as read');
     }
 };

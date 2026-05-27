@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { getIO } from "../socket/index.js";
 import { createConversationService } from "./conversation.service.js";
+import { sendPushNotification } from "./push.service.js";
 
 // Helper check to see if user is part of conversation
 export const checkUserInConversation = async (conversationId: string, userId: string) => {
@@ -71,6 +72,11 @@ export const createMessage = async (conversationId: string, senderId: string, co
     participants.forEach((p) => {
         if (p.userId !== senderId) {
             io.to(p.userId).emit("new_message", newMessage);
+            sendPushNotification(p.userId, {
+                title: `New message from ${newMessage.sender?.displayName}`,
+                body: newMessage.content,
+                data: { url: `/chat?chatId=${conversationId}` }
+            });
         }
     });
 
@@ -106,6 +112,11 @@ export const sendDirectMessageService = async (senderId: string, recipientId: st
     participants.forEach((p) => {
         if (p.userId !== senderId) {
             io.to(p.userId).emit('new_message', newMessage);
+            sendPushNotification(p.userId, {
+                title: `New message from ${newMessage.sender?.displayName}`,
+                body: newMessage.content,
+                data: { url: `/chat?chatId=${conversation.id}` }
+            });
         }
     });
 
