@@ -52,6 +52,14 @@ export const connectSocket = () => {
     // The recipient read the messages — update sender's view to show blue checkmarks
     useChatStore.getState().updateParticipantLastReadAt(conversationId, readBy, readAt);
   });
+
+  socket.on('typing_start', ({ conversationId, userId }: { conversationId: string; userId: string }) => {
+    useChatStore.getState().setTyping(conversationId, userId, true);
+  });
+
+  socket.on('typing_stop', ({ conversationId, userId }: { conversationId: string; userId: string }) => {
+    useChatStore.getState().setTyping(conversationId, userId, false);
+  });
 };
 
 export const disconnectSocket = () => {
@@ -62,3 +70,9 @@ export const disconnectSocket = () => {
 };
 
 export const getSocket = () => socket;
+
+export const emitTypingStatus = (conversationId: string, recipientId: string, isTyping: boolean) => {
+  if (!socket || !socket.connected) return;
+  const event = isTyping ? 'typing_start' : 'typing_stop';
+  socket.emit(event, { conversationId, recipientId });
+};

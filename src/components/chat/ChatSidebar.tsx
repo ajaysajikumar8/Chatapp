@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, MessageSquare, Globe, UserPlus, LogOut } from 'lucide-react';
+import { Search, MessageSquare, Globe, LogOut, CheckCheck } from 'lucide-react';
 import type { Conversation, User } from '../../types/chat';
 import { useChatStore } from '../../store/useChatStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -119,8 +119,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               })
               .map((conv) => {
               const isSelected = selectedConversationId === conv.id;
-              const participant = conv.participants.find(p => p.userId !== currentUserId)?.user || conv.participants[0].user;
-              const status = userPresence[participant.id]?.status || participant.status;
+              const otherParticipant = conv.participants.find(p => p.userId !== currentUserId) || conv.participants[0];
+              const otherUser = otherParticipant.user;
+              const status = userPresence[otherUser.id]?.status || otherUser.status;
               const lastMessage = conv.messages?.[0];
 
               return (
@@ -134,7 +135,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   {/* Avatar */}
                   <div className="relative shrink-0">
                     <div className="w-12 h-12 rounded-full bg-primary/20 text-primary-light flex items-center justify-center font-semibold text-lg border border-primary/30">
-                      {participant.displayName.charAt(0).toUpperCase()}
+                      {otherUser.displayName.charAt(0).toUpperCase()}
                     </div>
                     {status === 'ONLINE' && (
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-success border-2 border-bg-surface rounded-full"></div>
@@ -145,16 +146,25 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
                       <h3 className="font-medium text-text-base truncate pr-2">
-                        {participant.displayName}
+                        {otherUser.displayName}
                       </h3>
                       <span className="text-xs text-text-subtle whitespace-nowrap">
                         {formatRelativeDate(lastMessage?.createdAt)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center gap-2">
-                      <p className="text-sm text-text-muted truncate">
-                        {lastMessage?.content || (participant.username ? `@${participant.username}` : 'No messages yet')}
-                      </p>
+                      <div className="flex items-center gap-1 min-w-0">
+                        {lastMessage?.senderId === currentUserId && (
+                          <CheckCheck className={`w-[14px] h-[14px] shrink-0 ${
+                            otherParticipant.lastReadAt && new Date(lastMessage.createdAt) <= new Date(otherParticipant.lastReadAt)
+                              ? 'text-sky-400 drop-shadow-sm'
+                              : 'text-text-subtle'
+                          }`} />
+                        )}
+                        <p className="text-sm text-text-muted truncate">
+                          {lastMessage?.content || (otherUser.username ? `@${otherUser.username}` : 'No messages yet')}
+                        </p>
+                      </div>
                       {(conv.unreadCount ?? 0) > 0 && (
                         <span className="shrink-0 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                           {conv.unreadCount}

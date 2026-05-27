@@ -4,6 +4,9 @@ import { ChatArea } from '../components/chat/ChatArea';
 import { useChatStore } from '../store/useChatStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { connectSocket, disconnectSocket } from '../services/socket';
+import type { Message } from '../types/chat';
+
+const EMPTY_MESSAGES: Message[] = [];
 
 export const ChatPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -58,7 +61,7 @@ export const ChatPage: React.FC = () => {
   }, [selectedConversationId, tryMarkRead]);
 
   const selectedConversation = conversations.find((c) => c.id === selectedConversationId) || null;
-  const conversationMessages = selectedConversationId ? messages[selectedConversationId] || [] : [];
+  const conversationMessages = selectedConversationId ? messages[selectedConversationId] || EMPTY_MESSAGES : EMPTY_MESSAGES;
 
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden text-slate-50">

@@ -7,6 +7,7 @@ interface ChatState {
   conversations: Conversation[];
   messages: Record<string, Message[]>;
   userPresence: Record<string, { status: string; lastSeen?: string }>;
+  typingStatus: Record<string, string[]>; // conversationId -> array of userIds currently typing
   selectedConversationId: string | null;
   isLoading: boolean;
   error: string | null;
@@ -17,6 +18,7 @@ interface ChatState {
   setMessages: (conversationId: string, messages: Message[]) => void;
   setSelectedConversationId: (id: string | null) => void;
   updateUserPresence: (userId: string, status: string, lastSeen?: string) => void;
+  setTyping: (conversationId: string, userId: string, isTyping: boolean) => void;
   clearLocalUnreadCount: (conversationId: string) => void;
   updateParticipantLastReadAt: (conversationId: string, userId: string, lastReadAt: string) => void;
 
@@ -28,10 +30,14 @@ interface ChatState {
   markConversationRead: (conversationId: string) => Promise<void>;
 }
 
+// Module-level variable to manage typing timeouts (TTL) without bloating the Zustand state
+const typingTimeouts: Record<string, NodeJS.Timeout> = {};
+
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   messages: {},
   userPresence: {},
+  typingStatus: {},
   selectedConversationId: null,
   isLoading: false,
   error: null,
@@ -98,6 +104,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
   updateUserPresence: (userId, status, lastSeen) => set((state) => ({
     userPresence: { ...state.userPresence, [userId]: { status, lastSeen } },
   })),
+
+  setTyping: (conversationId, userId, isTyping) => set((state) => {
+    const currentTyping = state.typingStatus[conversationId] || [];
+    const isCurrentlyTyping = currentTyping.includes(userId);
+    const timeoutKey = `${conversationId}-${userId}`;
+
+    // Manage TTL
+    if (typingTimeouts[timeoutKey]) {
+      clearTimeout(typingTimeouts[timeoutKey]);
+      delete typingTimeouts[timeoutKey];
+    }
+
+    if (isTyping) {
+      // Set a 5-second TTL to automatically clear the typing indicator if a 'stop' or 'keep-alive' isn't received
+      typingTimeouts[timeoutKey] = setTimeout(() => {
+        get().setTyping(conversationId, userId, false);
+      }, 5000);
+
+      if (!isCurrentlyTyping) {
+        return {
+          typingStatus: {
+            ...state.typingStatus,
+            [conversationId]: [...currentTyping, userId],
+          },
+        };
+      }
+    } else if (!isTyping) {
+      if (isCurrentlyTyping) {
+        return {
+          typingStatus: {
+            ...state.typingStatus,
+            [conversationId]: currentTyping.filter((id) => id !== userId),
+          },
+        };
+      }
+    }
+    return state;
+  }),
 
   // Called when we mark a conversation as read locally
   clearLocalUnreadCount: (conversationId) => set((state) => ({
