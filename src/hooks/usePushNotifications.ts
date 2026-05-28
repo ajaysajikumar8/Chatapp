@@ -18,6 +18,7 @@ const urlBase64ToUint8Array = (base64String: string) => {
 
 export const usePushNotifications = () => {
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
   const [permission, setPermission] = useState<NotificationPermission>(() => {
     return typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default';
   });
@@ -55,9 +56,17 @@ export const usePushNotifications = () => {
 
       await api.post('/push/subscribe', subscription);
       setIsSubscribed(true);
+      setPushError(null);
       console.log('Successfully subscribed to push notifications');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to subscribe to push notifications:', error);
+      
+      // Specifically detect Brave's push service error or generic DOMExceptions
+      if (error?.message?.includes('push service error') || error?.name === 'NotAllowedError' || error?.name === 'AbortError') {
+          setPushError("Push notifications failed to register. If using Brave, go to Settings -> Privacy and security, and enable 'Use Google services for push messaging'.");
+      } else {
+          setPushError("An unknown error occurred while setting up push notifications.");
+      }
     }
   }, []);
 
@@ -88,5 +97,5 @@ export const usePushNotifications = () => {
     }
   }, []);
 
-  return { isSubscribed, permission, subscribe, unsubscribe };
+  return { isSubscribed, permission, pushError, setPushError, subscribe, unsubscribe };
 };

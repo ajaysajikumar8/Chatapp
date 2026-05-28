@@ -23,7 +23,7 @@ export const ChatPage: React.FC = () => {
   } = useChatStore();
   
   const [searchParams, setSearchParams] = useSearchParams();
-  const { subscribe, permission } = usePushNotifications();
+  const { subscribe, permission, pushError, setPushError } = usePushNotifications();
 
   // Handle URL deep linking for push notifications
   useEffect(() => {
@@ -109,21 +109,33 @@ export const ChatPage: React.FC = () => {
   const conversationMessages = selectedConversationId ? messages[selectedConversationId] || EMPTY_MESSAGES : EMPTY_MESSAGES;
 
   return (
-    <div className="flex h-screen bg-slate-950 overflow-hidden text-slate-50">
-      <ChatSidebar
-        conversations={conversations}
-        selectedConversationId={selectedConversationId}
-        onSelectConversation={setSelectedConversationId}
-        isVisible={selectedConversationId === null}
-      />
-      <ChatArea
-        conversation={selectedConversation}
-        messages={conversationMessages}
-        onBack={() => setSelectedConversationId(null)}
-        isVisible={selectedConversationId !== null}
-        currentUserId={user?.id || ''}
-        onNewMessage={() => tryMarkRead(selectedConversationId)}
-      />
+    <div className="flex flex-col h-screen bg-slate-950 overflow-hidden text-slate-50">
+      {pushError && (
+        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-3 text-red-400 text-sm flex justify-between items-start z-50">
+          <div>
+            <strong>Warning:</strong> {pushError}
+          </div>
+          <button onClick={() => setPushError(null)} className="text-red-400 hover:text-red-300 ml-4 font-bold">
+            ✕
+          </button>
+        </div>
+      )}
+      <div className="flex flex-1 overflow-hidden">
+        <ChatSidebar
+          conversations={conversations}
+          selectedConversationId={selectedConversationId}
+          onSelectConversation={setSelectedConversationId}
+          isVisible={selectedConversationId === null}
+        />
+        <ChatArea
+          conversation={selectedConversation}
+          messages={conversationMessages}
+          onBack={() => setSelectedConversationId(null)}
+          isVisible={selectedConversationId !== null}
+          currentUserId={user?.id || ''}
+          onNewMessage={() => tryMarkRead(selectedConversationId)}
+        />
+      </div>
     </div>
   );
 };
