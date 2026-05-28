@@ -1,36 +1,29 @@
-# chat-backend
+# Chat Backend
 
-Backend for a real-time chat application — REST APIs, WebSocket messaging, JWT authentication, and persistent message storage.
+This is the Node.js/Express backend for the real-time chat application.
 
-> See [ARCHITECTURE.md](ARCHITECTURE.md) for system design, database schema, scalability decisions, and the full roadmap.
-
-## Stack
-
-- **Node.js** + **Express** + **TypeScript**
-- **Socket.io** — real-time messaging
-- **Prisma** — ORM
-- **PostgreSQL** — primary database
-- **Redis** — pub/sub and presence *(Phase 3)*
+> **Note**: For system design, architecture, and API documentation, please see the `docs/` directory at the root of the project. For AI agent instructions, see `AI_INSTRUCTIONS.md` at the root.
 
 ## Prerequisites
 
 - Node.js 18+
-- PostgreSQL running locally (or a connection string)
+- PostgreSQL running locally
 - npm
 
 ## Getting Started
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Copy and fill in environment variables
+# 2. Configure environment
 cp .env.example .env
+# Edit .env and ensure DATABASE_URL is pointing to a valid, running PostgreSQL instance.
 
-# Run database migrations
+# 3. Run database migrations
 npx prisma migrate dev
 
-# Start development server
+# 4. Start development server
 npm run dev
 ```
 
@@ -38,11 +31,9 @@ npm run dev
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string (e.g., `postgresql://user:password@localhost:5432/chatdb`). **Note:** The database must be created before running migrations. Store this in `.env` file. |
-| `JWT_SECRET` | Secret used to sign JWT tokens |
-| `PORT` | Port the server listens on (default: `3000`) |
-
-> **Important**: Ensure PostgreSQL is running and the database specified in `DATABASE_URL` exists before running `npx prisma migrate dev`.
+| `DATABASE_URL` | PostgreSQL connection string (e.g., `postgresql://user:password@localhost:5432/chatdb`). |
+| `JWT_SECRET` | Secret used to sign JWT tokens. |
+| `PORT` | Port the server listens on (default: `3000`). |
 
 ## Scripts
 
@@ -51,31 +42,3 @@ npm run dev
 | `npm run dev` | Start dev server with hot reload |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm start` | Run compiled production build |
-
-## API
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `POST` | `/auth/register` | — | Register a new user |
-| `POST` | `/auth/login` | — | Login, returns JWT |
-| `GET` | `/conversations` | JWT | List user's conversations |
-| `GET` | `/conversations/:id/messages` | JWT | Paginated message history |
-
-## WebSocket Events
-
-| Event | Direction | Description |
-|-------|-----------|-------------|
-| `message:send` | Client → Server | Send a message |
-| `message:receive` | Server → Client | Incoming message |
-| `user:typing` | Client → Server | Typing indicator |
-| `user:presence` | Server → Client | Online/offline status |
-
-## Contributing
-
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feat/your-feature`
-3. Commit your changes and open a pull request
-
-## License
-
-ISC
