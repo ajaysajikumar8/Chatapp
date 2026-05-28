@@ -1,141 +1,37 @@
-# Frontend — Chat Application
+# Chat Frontend
 
-## Overview
+This is the React 19 frontend for the real-time chat application.
 
-This is the frontend for a real-time chat application. It provides authentication, conversation management, and live messaging using WebSockets. The UI is designed to be responsive, fast, and minimal, with a focus on real-time user experience.
+> **Note**: For system design, architecture, and API documentation, please see the `docs/` directory at the root of the project. For AI agent instructions, see `AI_INSTRUCTIONS.md` at the root.
 
----
+## Prerequisites
 
-## Tech Stack
+- Node.js 18+
+- npm
 
-- **React 19** — UI library
-- **TypeScript** — Type safety
-- **Tailwind CSS v4** — Styling (with CSS-based configuration)
-- **Zustand** — State management
-- **Socket.io Client** — Real-time communication
-
----
-
-## Folder Structure
-
-```
-src/
-│
-├── components/        # Reusable UI components
-├── pages/             # Route-level pages (Auth, Chat, etc.)
-├── hooks/             # Custom React hooks
-├── store/             # Zustand state management
-├── services/          # API & socket logic
-├── utils/             # Helper functions
-├── types/             # TypeScript types/interfaces
-├── styles/            # Global styles & Tailwind v4 theme configuration
-│   └── index.css      # Entry point for all CSS and Tailwind variables
-│
-├── App.tsx
-├── main.tsx
-```
-
----
-
-## State Management (Zustand)
-
-Used for:
-
-- Auth state (user session, token)
-- Active conversation
-- Messages cache
-- Online users (future phase)
-
-Keep it minimal. Don’t turn this into Redux 2.0.
-
----
-
-## Styling Strategy (Tailwind)
-
-### Global Styles
-
-Handled in `src/styles/index.css`. Use this file for:
-
-- **Tailwind v4 Configuration**: Define colors and fonts in the `@theme` block.
-- **CSS Resets**: Custom base styles or browser-specific fixes.
-- **Global Variables**: Theme-wide CSS variables.
-- **Scrollbar Styling**: Custom sleek scrollbars for chat windows.
-
-Everything else → Tailwind utility classes.
-
-### Component Styling
-
-- **Prefer Utility Classes**: Use inline Tailwind classes for 99% of styling.
-- **Reusable Components**: Extract repeated patterns into React components, not CSS classes.
-- **Avoid Custom CSS**: Do not create `.module.css` or large custom CSS files unless absolutely necessary.
-
----
-
-## API Integration
-
-All API calls are handled in `services/`:
-
-- Auth APIs (login, register)
-- Conversations
-- Messages
-
-Use a centralized API client (e.g., Axios instance) for:
-
-- Base URL
-- Auth headers
-- Error handling
-
----
-
-## WebSocket Integration
-
-- Initialize Socket.io client after authentication
-- Maintain a single connection instance
-- Handle:
-    - Incoming messages
-    - Message acknowledgements
-    - Reconnection logic (later phase)
-
----
-
-## Environment Variables
-
-Create a `.env` file:
-
-```
-VITE_API_BASE_URL=http://localhost:5000
-VITE_SOCKET_URL=http://localhost:5000
-```
-
----
-
-## Running the Project
+## Getting Started
 
 ```bash
-# install dependencies
+# 1. Install dependencies
 npm install
 
-# start development server
+# 2. Start development server
 npm run dev
 ```
 
----
+## Environment Variables
 
-## Build
+If required, create a `.env` file in this directory:
 
-```bash
-npm run build
+```
+VITE_API_BASE_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
 ```
 
----
+## Scripts
 
----
-
-## Development Notes
-
-- Keep components small and focused
-- Avoid premature abstraction
-- Optimize only when necessary
-- Prefer clarity over cleverness
-
----
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server with hot reload |
+| `npm run build` | Compile TypeScript to `dist/` for production |
+| `npm run preview` | Preview the production build locally |
