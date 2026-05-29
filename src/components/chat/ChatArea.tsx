@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Send, MoreVertical, Image as ImageIcon, CheckCheck } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ArrowLeft, Send, MoreVertical, Image as ImageIcon, CheckCheck, ChevronDown } from 'lucide-react';
+import { Virtuoso } from 'react-virtuoso';
+import type { VirtuosoHandle } from 'react-virtuoso';
 import type { Conversation, Message } from '../../types/chat';
 import { useChatStore } from '../../store/useChatStore';
 import { formatMessageGroupDate } from '../../utils/dateUtils';
@@ -26,12 +28,41 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 }) => {
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const lastEmitTimeRef = useRef(0);
   
-  const { userPresence, sendMessage } = useChatStore();
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
+
+  // Manage firstItemIndex safely to avoid shifting on append
+  const [firstItemIndex, setFirstItemIndex] = useState(() => 1000000 - (messages.length || 0));
+  const firstMessageIdRef = useRef(messages[0]?.id);
+
+  useEffect(() => {
+    if (!messages.length) return;
+    if (messages[0].id !== firstMessageIdRef.current) {
+      const oldIndex = messages.findIndex(m => m.id === firstMessageIdRef.current);
+      if (oldIndex > 0) {
+        // Items were prepended
+        setFirstItemIndex(prev => prev - oldIndex);
+      } else {
+        // Switched conversation
+        setFirstItemIndex(1000000 - messages.length);
+      }
+      firstMessageIdRef.current = messages[0].id;
+    }
+  }, [messages, conversation?.id]);
+  
+  const { 
+    userPresence, 
+    sendMessage, 
+    hasMoreMessages, 
+    cursors, 
+    isFetchingMore, 
+    fetchMessages 
+  } = useChatStore();
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   
   // Use a targeted selector to prevent unnecessary re-renders when other conversations update typing status
   const typingUsers = useChatStore(state => 
@@ -61,22 +92,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Remove the simple scroll to bottom since Virtuoso handles it via initialTopMostItemIndex
+  // But we still might want to scroll on new messages if the user is already near the bottom
 
   // Call onNewMessage when new messages arrive so ChatPage can mark as read
   const prevMessagesLengthRef = React.useRef(messages.length);
   useEffect(() => {
     if (messages.length > prevMessagesLengthRef.current) {
       onNewMessage();
+      
+      const newMessagesCount = messages.length - prevMessagesLengthRef.current;
+      if (!isAtBottom) {
+        const incomingNewMessages = messages.slice(-newMessagesCount).filter(m => m.senderId !== currentUserId);
+        if (incomingNewMessages.length > 0) {
+          setUnreadWhileScrolled(prev => prev + incomingNewMessages.length);
+        }
+      }
     }
     prevMessagesLengthRef.current = messages.length;
-  }, [messages.length, onNewMessage]);
+  }, [messages, onNewMessage, isAtBottom, currentUserId]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, typingUsers]);
+  const loadMoreMessages = useCallback(() => {
+    if (conversation && !isFetchingMore && hasMoreMessages[conversation.id] !== false) {
+      const cursor = cursors[conversation.id];
+      if (cursor) {
+        fetchMessages(conversation.id, cursor);
+      }
+    }
+  }, [conversation, isFetchingMore, hasMoreMessages, cursors, fetchMessages]);
 
   useEffect(() => {
     return () => {
@@ -199,93 +242,139 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-bg-base">
-        {messages.map((msg, index) => {
-          const isMine = msg.senderId === currentUserId;
-          const showAvatar = !isMine && (index === 0 || messages[index - 1].senderId !== msg.senderId);
-
-          const messageDateGroup = formatMessageGroupDate(msg.createdAt);
-          const previousMessageDateGroup = index > 0 ? formatMessageGroupDate(messages[index - 1].createdAt) : null;
-          const showDateSeparator = messageDateGroup !== previousMessageDateGroup;
-
-          return (
-            <React.Fragment key={msg.id}>
-              {showDateSeparator && (
-                <div className="flex justify-center my-4">
-                  <div className="px-3 py-1 bg-bg-surface border border-border-subtle rounded-full text-xs font-medium text-text-subtle shadow-sm">
-                    {messageDateGroup}
-                  </div>
-                </div>
-              )}
-              <div
-                className={`flex gap-3 max-w-[85%] ${
-                  isMine ? 'ml-auto flex-row-reverse' : ''
-                }`}
-              >
-              {!isMine && (
-                <div className="shrink-0 w-8">
-                  {showAvatar && (
+      <div className="flex-1 bg-bg-base overflow-hidden relative">
+        <Virtuoso
+          ref={virtuosoRef}
+          data={messages}
+          firstItemIndex={firstItemIndex}
+          initialTopMostItemIndex={messages.length > 0 ? messages.length - 1 : 0} // Start at the bottom
+          startReached={loadMoreMessages}
+          atBottomStateChange={(bottom) => {
+            setIsAtBottom(bottom);
+            if (bottom) {
+              setUnreadWhileScrolled(0);
+            }
+          }}
+          followOutput={(isAtBottom: boolean) => {
+            if (messages.length > 0 && messages[messages.length - 1].senderId === currentUserId) {
+              return 'smooth';
+            }
+            return isAtBottom ? 'smooth' : false;
+          }}
+          className="h-full w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          components={{
+            Header: () => <div className="h-4" />,
+            Footer: () => (
+              conversation && typingUsers.includes(otherUser.id) ? (
+                <div className="flex gap-3 max-w-[85%] mt-2 pb-4 px-4">
+                  <div className="shrink-0 w-8">
                     <div className="w-8 h-8 rounded-full bg-primary/20 text-primary-light flex items-center justify-center text-xs font-medium border border-primary/30">
                       {otherUser.displayName.charAt(0).toUpperCase()}
                     </div>
-                  )}
+                  </div>
+                  <div className="flex flex-col items-start">
+                    <div className="px-4 py-3 rounded-2xl bg-bg-surface-hover border border-border-subtle rounded-tl-sm flex items-center gap-1.5 h-[44px]">
+                      <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
+                      <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
+                      <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
+                    </div>
+                  </div>
                 </div>
-              )}
-              
-              <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} max-w-full`}>
+              ) : <div className="h-4"></div>
+            ),
+          }}
+          itemContent={(_, msg) => {
+            const dataIndex = messages.findIndex(m => m.id === msg.id);
+            const isMine = msg.senderId === currentUserId;
+            const showAvatar = !isMine && (dataIndex === 0 || messages[dataIndex - 1].senderId !== msg.senderId);
+
+            const messageDateGroup = formatMessageGroupDate(msg.createdAt);
+            const previousMessageDateGroup = dataIndex > 0 ? formatMessageGroupDate(messages[dataIndex - 1].createdAt) : null;
+            const showDateSeparator = messageDateGroup !== previousMessageDateGroup;
+
+            return (
+              <div className="pb-6 px-4">
+                {showDateSeparator && (
+                  <div className="flex justify-center mb-4">
+                    <div className="px-3 py-1 bg-bg-surface border border-border-subtle rounded-full text-xs font-medium text-text-subtle shadow-sm">
+                      {messageDateGroup}
+                    </div>
+                  </div>
+                )}
                 <div
-                  className={`px-3 pt-2 pb-1.5 rounded-2xl text-[15px] max-w-full shadow-sm ${
-                    isMine
-                      ? 'bg-primary text-white rounded-tr-sm'
-                      : 'bg-bg-surface-hover text-text-base rounded-tl-sm border border-border-subtle'
+                  className={`flex gap-3 max-w-[85%] ${
+                    isMine ? 'ml-auto flex-row-reverse' : ''
                   }`}
                 >
-                  <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-                    <span className="text-left leading-relaxed max-w-full break-words">
-                      {msg.content}
-                    </span>
-                    
-                    <div className={`flex items-center justify-end gap-1 shrink-0 ml-auto pb-[1px] ${isMine ? 'text-white/80' : 'text-text-subtle'}`}>
-                      <span className="text-[10.5px] font-medium leading-none tracking-wide">
-                        {new Date(msg.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                      {isMine && (
-                        <div className="flex items-center">
-                          {otherParticipant.lastReadAt && new Date(msg.createdAt) <= new Date(otherParticipant.lastReadAt) ? (
-                            <CheckCheck className="w-[15px] h-[15px] text-[#38bdf8] drop-shadow-sm stroke-[2.5]" />
-                          ) : (
-                            <CheckCheck className="w-[15px] h-[15px] opacity-75 stroke-[2.5]" />
-                          )}
+                  {!isMine && (
+                    <div className="shrink-0 w-8">
+                      {showAvatar && (
+                        <div className="w-8 h-8 rounded-full bg-primary/20 text-primary-light flex items-center justify-center text-xs font-medium border border-primary/30">
+                          {otherUser.displayName.charAt(0).toUpperCase()}
                         </div>
                       )}
+                    </div>
+                  )}
+                  
+                  <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} max-w-full`}>
+                    <div
+                      className={`px-3 pt-2 pb-1.5 rounded-2xl text-[15px] max-w-full shadow-sm ${
+                        isMine
+                          ? 'bg-primary text-white rounded-tr-sm'
+                          : 'bg-bg-surface-hover text-text-base rounded-tl-sm border border-border-subtle'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
+                        <span className="text-left leading-relaxed max-w-full break-words">
+                          {msg.content}
+                        </span>
+                        
+                        <div className={`flex items-center justify-end gap-1 shrink-0 ml-auto pb-[1px] ${isMine ? 'text-white/80' : 'text-text-subtle'}`}>
+                          <span className="text-[10.5px] font-medium leading-none tracking-wide">
+                            {new Date(msg.createdAt).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          {isMine && (
+                            <div className="flex items-center">
+                              {otherParticipant.lastReadAt && new Date(msg.createdAt) <= new Date(otherParticipant.lastReadAt) ? (
+                                <CheckCheck className="w-[15px] h-[15px] text-[#38bdf8] drop-shadow-sm stroke-[2.5]" />
+                              ) : (
+                                <CheckCheck className="w-[15px] h-[15px] opacity-75 stroke-[2.5]" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-            </React.Fragment>
-          );
-        })}
-        {conversation && typingUsers.includes(otherUser.id) && (
-          <div className="flex gap-3 max-w-[85%]">
-            <div className="shrink-0 w-8">
-              <div className="w-8 h-8 rounded-full bg-primary/20 text-primary-light flex items-center justify-center text-xs font-medium border border-primary/30">
-                {otherUser.displayName.charAt(0).toUpperCase()}
-              </div>
-            </div>
-            <div className="flex flex-col items-start">
-              <div className="px-4 py-3 rounded-2xl bg-bg-surface-hover border border-border-subtle rounded-tl-sm flex items-center gap-1.5 h-[44px]">
-                <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
-                <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
-                <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
-              </div>
-            </div>
-          </div>
+            );
+          }}
+        />
+
+        {/* Scroll to Bottom FAB */}
+        {!isAtBottom && (
+          <button
+            onClick={() => {
+              virtuosoRef.current?.scrollToIndex({
+                index: firstItemIndex + messages.length - 1,
+                align: 'end',
+                behavior: 'smooth'
+              });
+            }}
+            className="absolute bottom-4 right-4 z-20 p-2.5 bg-bg-surface/95 backdrop-blur-md border border-border-subtle rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:bg-bg-surface-hover hover:scale-105 active:scale-95 transition-all text-text-base flex items-center justify-center group"
+          >
+            <ChevronDown className="w-5 h-5 text-text-subtle group-hover:text-text-base transition-colors" />
+            {unreadWhileScrolled > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[10px] font-bold px-1.5 min-w-[20px] h-[20px] flex items-center justify-center rounded-full shadow-sm ring-2 ring-bg-surface">
+                {unreadWhileScrolled > 99 ? '99+' : unreadWhileScrolled}
+              </span>
+            )}
+          </button>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}

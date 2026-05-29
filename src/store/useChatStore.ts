@@ -7,16 +7,19 @@ interface ChatState {
   conversations: Conversation[];
   messages: Record<string, Message[]>;
   hasFetchedHistory: Record<string, boolean>;
+  hasMoreMessages: Record<string, boolean>;
+  cursors: Record<string, string | null>;
   userPresence: Record<string, { status: string; lastSeen?: string }>;
   typingStatus: Record<string, string[]>; // conversationId -> array of userIds currently typing
   selectedConversationId: string | null;
   isLoading: boolean;
+  isFetchingMore: boolean;
   error: string | null;
 
   // Actions
   setConversations: (conversations: Conversation[]) => void;
   addMessage: (message: Message) => void;
-  setMessages: (conversationId: string, messages: Message[]) => void;
+  setMessages: (conversationId: string, messages: Message[], nextCursor?: string, hasMore?: boolean, prepend?: boolean) => void;
   setSelectedConversationId: (id: string | null) => void;
   updateUserPresence: (userId: string, status: string, lastSeen?: string) => void;
   setTyping: (conversationId: string, userId: string, isTyping: boolean) => void;
@@ -25,7 +28,7 @@ interface ChatState {
 
   // Thunks
   fetchConversations: () => Promise<void>;
-  fetchMessages: (conversationId: string) => Promise<void>;
+  fetchMessages: (conversationId: string, cursor?: string) => Promise<void>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   startConversation: (user: User) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
@@ -38,10 +41,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   messages: {},
   hasFetchedHistory: {},
+  hasMoreMessages: {},
+  cursors: {},
   userPresence: {},
   typingStatus: {},
   selectedConversationId: null,
   isLoading: false,
+  isFetchingMore: false,
   error: null,
 
   setConversations: (conversations) => {
@@ -97,7 +103,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
   }),
 
-  setMessages: (conversationId, messages) => set((state) => {
+  setMessages: (conversationId, messages, nextCursor, hasMore, _prepend) => set((state) => {
     const existingMessages = state.messages[conversationId] || [];
     const messageMap = new Map(existingMessages.map(m => [m.id, m]));
     messages.forEach(m => messageMap.set(m.id, m));
@@ -109,6 +115,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return {
       messages: { ...state.messages, [conversationId]: mergedMessages },
       hasFetchedHistory: { ...state.hasFetchedHistory, [conversationId]: true },
+      cursors: { ...state.cursors, [conversationId]: nextCursor !== undefined ? nextCursor : state.cursors[conversationId] },
+      hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: hasMore !== undefined ? hasMore : state.hasMoreMessages[conversationId] },
     };
   }),
 
@@ -191,15 +199,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  fetchMessages: async (conversationId: string) => {
+  fetchMessages: async (conversationId: string, cursor?: string) => {
     if (conversationId.startsWith('temp_')) return;
-    if (get().hasFetchedHistory[conversationId]) return;
+    if (!cursor && get().hasFetchedHistory[conversationId]) return;
+    if (cursor && get().hasMoreMessages[conversationId] === false) return;
+    if (cursor && get().isFetchingMore) return;
+
+    if (cursor) set({ isFetchingMore: true });
+
     try {
-      const response = await api.get(`/messages/${conversationId}`);
-      get().setMessages(conversationId, response.data.data);
+      const url = cursor ? `/messages/${conversationId}?cursor=${cursor}` : `/messages/${conversationId}`;
+      const response = await api.get(url);
+      
+      const { messages, nextCursor, hasMore } = response.data.data;
+      get().setMessages(conversationId, messages, nextCursor, hasMore, !!cursor);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Failed to fetch messages:', error);
+    } finally {
+      if (cursor) set({ isFetchingMore: false });
     }
   },
 
