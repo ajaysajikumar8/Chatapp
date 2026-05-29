@@ -8,13 +8,15 @@ import {
     sendDirectMessageService,
 } from '../services/message.service.js';
 
-export const getMessages = async (req: Request<{ conversationId: string }>, res: Response): Promise<void> => {
+export const getMessages = async (req: Request<{ conversationId: string }, any, any, { cursor?: string, limit?: string }>, res: Response): Promise<void> => {
     try {
         const userId = req.user!.id;
         const { conversationId } = req.params;
+        const { cursor } = req.query;
+        const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
 
-        const messages = await getMessagesByConversationId(conversationId, userId);
-        sendSuccess(res, "Messages fetched successfully", messages);
+        const result = await getMessagesByConversationId(conversationId, userId, cursor, limit);
+        sendSuccess(res, "Messages fetched successfully", result);
     } catch (error: any) {
         console.error("Error in getMessages:", error);
         sendError(res, error.message || 'Failed to fetch messages', error.message?.includes('Unauthorized') ? 403 : 500);

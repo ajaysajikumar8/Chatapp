@@ -16,29 +16,46 @@ export const checkUserInConversation = async (conversationId: string, userId: st
     return !!participant;
 };
 
-export const getMessagesByConversationId = async (conversationId: string, userId: string) => {
+export const getMessagesByConversationId = async (conversationId: string, userId: string, cursor?: string, limit: number = 50) => {
     const isParticipant = await checkUserInConversation(conversationId, userId);
     if (!isParticipant) {
         throw new Error("Unauthorized to access this conversation");
     }
 
-    return await prisma.message.findMany({
-        where: {
-            conversationId,
-        },
+    const take = limit + 1;
+
+    const messages = await prisma.message.findMany({
+        where: { conversationId },
         include: {
             sender: {
-                select: {
-                    id: true,
-                    displayName: true,
-                    email: true,
-                },
+                select: { id: true, displayName: true, email: true },
             },
         },
+        take,
+        ...(cursor && {
+            skip: 1,
+            cursor: { id: cursor },
+        }),
         orderBy: {
-            createdAt: "asc", 
+            createdAt: "desc",
         },
     });
+
+    const hasMore = messages.length > limit;
+    const paginatedMessages = hasMore ? messages.slice(0, limit) : messages;
+
+    // Prisma returns newest first (desc). We want oldest first (asc) for UI.
+    const reversedMessages = paginatedMessages.reverse();
+    
+    // The oldest message in this batch will be the cursor for the next batch
+    // Because we reversed it, it's the first element in the reversed array
+    const nextCursor = hasMore ? reversedMessages[0].id : undefined;
+
+    return {
+        messages: reversedMessages,
+        nextCursor,
+        hasMore
+    };
 };
 
 export const createMessage = async (conversationId: string, senderId: string, content: string) => {
