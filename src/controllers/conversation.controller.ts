@@ -48,8 +48,9 @@ export const markConversationRead = async (req: Request<{ id: string }>, res: Re
         const { otherParticipantIds, readAt } = await markConversationAsRead(conversationId, userId);
 
         // Emit messages_read to the other participant(s) so they see blue checkmarks
+        // Also emit to the user who read it to clear unread counts on their other devices
         const io = getIO();
-        otherParticipantIds.forEach((participantId) => {
+        [...otherParticipantIds, userId].forEach((participantId) => {
             io.to(participantId).emit('messages_read', { conversationId, readBy: userId, readAt });
         });
 

@@ -87,8 +87,8 @@ export const createMessage = async (conversationId: string, senderId: string, co
     
     const io = getIO();
     participants.forEach((p) => {
+        io.to(p.userId).emit("new_message", newMessage);
         if (p.userId !== senderId) {
-            io.to(p.userId).emit("new_message", newMessage);
             sendPushNotification(p.userId, {
                 title: `New message from ${newMessage.sender?.displayName}`,
                 body: newMessage.content,
@@ -127,8 +127,8 @@ export const sendDirectMessageService = async (senderId: string, recipientId: st
     });
     const io = getIO();
     participants.forEach((p) => {
+        io.to(p.userId).emit('new_message', newMessage);
         if (p.userId !== senderId) {
-            io.to(p.userId).emit('new_message', newMessage);
             sendPushNotification(p.userId, {
                 title: `New message from ${newMessage.sender?.displayName}`,
                 body: newMessage.content,
@@ -178,9 +178,7 @@ export const updateMessageService = async (messageId: string, senderId: string, 
     
     const io = getIO();
     participants.forEach((p) => {
-        if (p.userId !== senderId) {
-            io.to(p.userId).emit("message_updated", updatedMessage);
-        }
+        io.to(p.userId).emit("message_updated", updatedMessage);
     });
 
     return updatedMessage;
@@ -209,9 +207,7 @@ export const deleteMessageService = async (messageId: string, senderId: string) 
     
     const io = getIO();
     participants.forEach((p) => {
-        if (p.userId !== senderId) {
-            io.to(p.userId).emit("message_deleted", { messageId, conversationId: message.conversationId });
-        }
+        io.to(p.userId).emit("message_deleted", { messageId, conversationId: message.conversationId });
     });
 
     return true;

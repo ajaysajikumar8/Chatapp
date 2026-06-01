@@ -66,8 +66,9 @@ Goal: Behave like a real production system.
 *   Client reconnect + retry logic
 *   Pagination for message history
 
-### Phase 3 — Scalability Layer
-Goal: Horizontal scalability.
+### Phase 3 — Feature Expansion & Scalability
+Goal: Feature completeness and horizontal scalability.
+*   Media support (Image/Video/File attachments via local storage or S3)
 *   Redis Pub/Sub for cross-instance message fan-out
 *   Redis for tracking online users
 *   Multiple server instances behind Nginx
