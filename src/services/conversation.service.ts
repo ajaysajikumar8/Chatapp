@@ -29,23 +29,25 @@ export const getConversationsForUser = async (userId: string) => {
         orderBy: { updatedAt: 'desc' },
     });
 
-    // Compute unread count for each conversation using the lastReadAt sync token
-    const conversationsWithUnread = await Promise.all(
-        conversations.map(async (conv) => {
-            const myParticipant = conv.participants.find((p) => p.userId === userId);
-            const lastReadAt = myParticipant?.lastReadAt ?? new Date(0);
+    // Fetch unread counts for all these conversations in a single raw query
+    // This avoids the N+1 query problem
+    const unreadCountsRaw = await prisma.$queryRaw<{ conversation_id: string; count: bigint }[]>`
+        SELECT m."conversation_id", COUNT(m.id) as count
+        FROM "messages" m
+        JOIN "conversation_participants" p ON m."conversation_id" = p."conversation_id" AND p."user_id" = ${userId}
+        WHERE (m."sender_id" != ${userId} OR m."sender_id" IS NULL)
+        AND m."created_at" > p."last_read_at"
+        GROUP BY m."conversation_id"
+    `;
 
-            const unreadCount = await prisma.message.count({
-                where: {
-                    conversationId: conv.id,
-                    senderId: { not: userId },
-                    createdAt: { gt: lastReadAt },
-                },
-            });
-
-            return { ...conv, unreadCount };
-        })
+    const unreadCountsMap = new Map(
+        unreadCountsRaw.map(row => [row.conversation_id, Number(row.count)])
     );
+
+    const conversationsWithUnread = conversations.map(conv => ({
+        ...conv,
+        unreadCount: unreadCountsMap.get(conv.id) || 0
+    }));
 
     return conversationsWithUnread;
 };

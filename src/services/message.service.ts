@@ -82,6 +82,47 @@ export const getMessagesByConversationId = async (conversationId: string, userId
     };
 };
 
+const resolveAttachmentAndBroadcast = async (newMessage: any, conversationId: string, senderId: string) => {
+    // Resolve presigned URL if there is an attachment
+    let returnedMessage = { ...newMessage };
+    if (newMessage.attachmentUrl) {
+        try {
+            const signedUrl = await generatePresignedDownloadUrl(newMessage.attachmentUrl);
+            returnedMessage.attachmentUrl = signedUrl;
+        } catch (err) {
+            console.error("Failed to generate signed URL for new message:", err);
+        }
+    }
+
+    const participants = await prisma.conversationParticipant.findMany({
+        where: { conversationId }
+    });
+    
+    const io = getIO();
+    participants.forEach((p) => {
+        io.to(p.userId).emit("new_message", returnedMessage);
+        if (p.userId !== senderId) {
+            try {
+                sendPushNotification(p.userId, {
+                    title: `New message from ${newMessage.sender?.displayName}`,
+                    body: newMessage.content,
+                    data: { url: `/chat?chatId=${conversationId}` }
+                });
+            } catch (err) {
+                console.error(`Failed to send push notification to ${p.userId}:`, err);
+            }
+        }
+    });
+
+    // Bump conversation updatedAt so sidebar sort by recency stays accurate
+    await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+    });
+
+    return returnedMessage;
+};
+
 export const createMessage = async (
     conversationId: string, 
     senderId: string, 
@@ -115,38 +156,7 @@ export const createMessage = async (
         },
     });
 
-    // Resolve presigned URL if there is an attachment
-    let returnedMessage = { ...newMessage };
-    if (newMessage.attachmentUrl) {
-        try {
-            const signedUrl = await generatePresignedDownloadUrl(newMessage.attachmentUrl);
-            returnedMessage.attachmentUrl = signedUrl;
-        } catch (err) {
-            console.error("Failed to generate signed URL for new message:", err);
-        }
-    }
-
-    const participants = await prisma.conversationParticipant.findMany({
-        where: { conversationId }
-    });
-    
-    const io = getIO();
-    participants.forEach((p) => {
-        io.to(p.userId).emit("new_message", returnedMessage);
-        if (p.userId !== senderId) {
-            sendPushNotification(p.userId, {
-                title: `New message from ${newMessage.sender?.displayName}`,
-                body: newMessage.content,
-                data: { url: `/chat?chatId=${conversationId}` }
-            });
-        }
-    });
-
-    // Bump conversation updatedAt so sidebar sort by recency stays accurate
-    await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { updatedAt: new Date() },
-    });
+    const returnedMessage = await resolveAttachmentAndBroadcast(newMessage, conversationId, senderId);
 
     return returnedMessage;
 };
@@ -180,38 +190,7 @@ export const sendDirectMessageService = async (
         },
     });
 
-    // Resolve presigned URL if there is an attachment
-    let returnedMessage = { ...newMessage };
-    if (newMessage.attachmentUrl) {
-        try {
-            const signedUrl = await generatePresignedDownloadUrl(newMessage.attachmentUrl);
-            returnedMessage.attachmentUrl = signedUrl;
-        } catch (err) {
-            console.error("Failed to generate signed URL for direct message:", err);
-        }
-    }
-
-    // 3. Emit new_message to all other participants
-    const participants = await prisma.conversationParticipant.findMany({
-        where: { conversationId: conversation.id },
-    });
-    const io = getIO();
-    participants.forEach((p) => {
-        io.to(p.userId).emit('new_message', returnedMessage);
-        if (p.userId !== senderId) {
-            sendPushNotification(p.userId, {
-                title: `New message from ${newMessage.sender?.displayName}`,
-                body: newMessage.content,
-                data: { url: `/chat?chatId=${conversation.id}` }
-            });
-        }
-    });
-
-    // 4. Update conversation updatedAt so sidebar sort stays accurate
-    await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { updatedAt: new Date() },
-    });
+    const returnedMessage = await resolveAttachmentAndBroadcast(newMessage, conversation.id, senderId);
 
     return { conversation, message: returnedMessage };
 };
