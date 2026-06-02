@@ -135,3 +135,17 @@ export const deleteMessage = async (req: Request<{ id: string }>, res: Response)
         sendError(res, error.message || 'Failed to delete message', error.message?.includes('Unauthorized') ? 403 : 400);
     }
 };
+
+export const getDownloadUrl = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    try {
+        const userId = req.user!.id;
+        const { id } = req.params;
+
+        const { getMessageAttachmentUrlService } = await import('../services/message.service.js');
+        const downloadUrl = await getMessageAttachmentUrlService(id, userId);
+        sendSuccess(res, "Download URL generated successfully", { downloadUrl });
+    } catch (error: any) {
+        console.error("Error in getDownloadUrl:", error);
+        sendError(res, error.message || 'Failed to get download URL', error.message?.includes('Unauthorized') ? 403 : 400);
+    }
+};

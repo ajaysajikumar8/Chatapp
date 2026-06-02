@@ -282,3 +282,20 @@ export const deleteMessageService = async (messageId: string, senderId: string) 
 
     return true;
 };
+
+export const getMessageAttachmentUrlService = async (messageId: string, userId: string): Promise<string> => {
+    const message = await prisma.message.findUnique({
+        where: { id: messageId }
+    });
+
+    if (!message || !message.attachmentUrl) {
+        throw new Error("Attachment not found");
+    }
+
+    const isParticipant = await checkUserInConversation(message.conversationId, userId);
+    if (!isParticipant) {
+        throw new Error("Unauthorized to access this conversation");
+    }
+
+    return await generatePresignedDownloadUrl(message.attachmentUrl);
+};
