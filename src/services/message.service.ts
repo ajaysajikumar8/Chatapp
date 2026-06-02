@@ -2,9 +2,18 @@ import { prisma } from "../lib/prisma.js";
 import { getIO } from "../socket/index.js";
 import { createConversationService } from "./conversation.service.js";
 import { sendPushNotification } from "./push.service.js";
+import { generatePresignedDownloadUrl } from "./storage.service.js";
 
 // Helper check to see if user is part of conversation
 export const checkUserInConversation = async (conversationId: string, userId: string) => {
+    if (conversationId.startsWith('temp_')) {
+        const recipientId = conversationId.replace('temp_', '');
+        const recipient = await prisma.user.findUnique({
+            where: { id: recipientId }
+        });
+        return !!recipient;
+    }
+
     const participant = await prisma.conversationParticipant.findUnique({
         where: {
             conversationId_userId: {
@@ -49,16 +58,38 @@ export const getMessagesByConversationId = async (conversationId: string, userId
     
     // The oldest message in this batch will be the cursor for the next batch
     // Because we reversed it, it's the first element in the reversed array
-    const nextCursor = hasMore ? reversedMessages[0].id : undefined;
+    const nextCursor = hasMore ? reversedMessages[0]?.id : undefined;
+
+    // Resolve presigned URLs for any attachments
+    const messagesWithPresignedUrls = await Promise.all(reversedMessages.map(async (msg) => {
+        if (msg.attachmentUrl) {
+            try {
+                // attachmentUrl stores the fileKey in this architecture
+                const signedUrl = await generatePresignedDownloadUrl(msg.attachmentUrl);
+                return { ...msg, attachmentUrl: signedUrl };
+            } catch (err) {
+                console.error(`Failed to generate presigned URL for msg ${msg.id}`, err);
+                return msg;
+            }
+        }
+        return msg;
+    }));
 
     return {
-        messages: reversedMessages,
+        messages: messagesWithPresignedUrls,
         nextCursor,
         hasMore
     };
 };
 
-export const createMessage = async (conversationId: string, senderId: string, content: string) => {
+export const createMessage = async (
+    conversationId: string, 
+    senderId: string, 
+    content: string | undefined,
+    attachmentUrl?: string,
+    attachmentType?: string,
+    attachmentName?: string
+) => {
     const isParticipant = await checkUserInConversation(conversationId, senderId);
     if (!isParticipant) {
         throw new Error("Unauthorized to access this conversation");
@@ -68,7 +99,10 @@ export const createMessage = async (conversationId: string, senderId: string, co
         data: {
             conversationId,
             senderId,
-            content,
+            content: content ?? null,
+            attachmentUrl: attachmentUrl ?? null,
+            attachmentType: attachmentType ?? null,
+            attachmentName: attachmentName ?? null
         },
         include: {
             sender: {
@@ -81,13 +115,24 @@ export const createMessage = async (conversationId: string, senderId: string, co
         },
     });
 
+    // Resolve presigned URL if there is an attachment
+    let returnedMessage = { ...newMessage };
+    if (newMessage.attachmentUrl) {
+        try {
+            const signedUrl = await generatePresignedDownloadUrl(newMessage.attachmentUrl);
+            returnedMessage.attachmentUrl = signedUrl;
+        } catch (err) {
+            console.error("Failed to generate signed URL for new message:", err);
+        }
+    }
+
     const participants = await prisma.conversationParticipant.findMany({
         where: { conversationId }
     });
     
     const io = getIO();
     participants.forEach((p) => {
-        io.to(p.userId).emit("new_message", newMessage);
+        io.to(p.userId).emit("new_message", returnedMessage);
         if (p.userId !== senderId) {
             sendPushNotification(p.userId, {
                 title: `New message from ${newMessage.sender?.displayName}`,
@@ -103,17 +148,31 @@ export const createMessage = async (conversationId: string, senderId: string, co
         data: { updatedAt: new Date() },
     });
 
-    return newMessage;
+    return returnedMessage;
 };
 
-export const sendDirectMessageService = async (senderId: string, recipientId: string, content: string) => {
+export const sendDirectMessageService = async (
+    senderId: string, 
+    recipientId: string, 
+    content: string | undefined,
+    attachmentUrl?: string,
+    attachmentType?: string,
+    attachmentName?: string
+) => {
     // 1. Get or create the conversation (sender is guaranteed to be a participant)
     const { conversation } = await createConversationService(senderId, recipientId);
 
     // 2. Create message directly — skip checkUserInConversation since we just
     //    established participation above, avoiding a redundant DB round-trip.
     const newMessage = await prisma.message.create({
-        data: { conversationId: conversation.id, senderId, content },
+        data: { 
+            conversationId: conversation.id, 
+            senderId, 
+            content: content ?? null,
+            attachmentUrl: attachmentUrl ?? null,
+            attachmentType: attachmentType ?? null,
+            attachmentName: attachmentName ?? null
+        },
         include: {
             sender: {
                 select: { id: true, displayName: true, email: true },
@@ -121,13 +180,24 @@ export const sendDirectMessageService = async (senderId: string, recipientId: st
         },
     });
 
+    // Resolve presigned URL if there is an attachment
+    let returnedMessage = { ...newMessage };
+    if (newMessage.attachmentUrl) {
+        try {
+            const signedUrl = await generatePresignedDownloadUrl(newMessage.attachmentUrl);
+            returnedMessage.attachmentUrl = signedUrl;
+        } catch (err) {
+            console.error("Failed to generate signed URL for direct message:", err);
+        }
+    }
+
     // 3. Emit new_message to all other participants
     const participants = await prisma.conversationParticipant.findMany({
         where: { conversationId: conversation.id },
     });
     const io = getIO();
     participants.forEach((p) => {
-        io.to(p.userId).emit('new_message', newMessage);
+        io.to(p.userId).emit('new_message', returnedMessage);
         if (p.userId !== senderId) {
             sendPushNotification(p.userId, {
                 title: `New message from ${newMessage.sender?.displayName}`,
@@ -143,7 +213,7 @@ export const sendDirectMessageService = async (senderId: string, recipientId: st
         data: { updatedAt: new Date() },
     });
 
-    return { conversation, message: newMessage };
+    return { conversation, message: returnedMessage };
 };
 
 export const updateMessageService = async (messageId: string, senderId: string, content: string) => {

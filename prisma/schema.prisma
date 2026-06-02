@@ -76,7 +76,10 @@ model Message {
   id             String       @id @default(cuid())
   conversationId String       @map("conversation_id")
   senderId       String?      @map("sender_id")
-  content        String
+  content        String?
+  attachmentUrl  String?      @map("attachment_url")
+  attachmentType String?      @map("attachment_type")
+  attachmentName String?      @map("attachment_name")
   createdAt      DateTime     @default(now()) @map("created_at")
 
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

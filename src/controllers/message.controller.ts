@@ -6,7 +6,9 @@ import {
     updateMessageService,
     deleteMessageService,
     sendDirectMessageService,
+    checkUserInConversation,
 } from '../services/message.service.js';
+import { generatePresignedUploadUrl } from '../services/storage.service.js';
 
 export const getMessages = async (req: Request<{ conversationId: string }, any, any, { cursor?: string, limit?: string }>, res: Response): Promise<void> => {
     try {
@@ -27,18 +29,48 @@ export const getMessageById = async (req: Request<{ id: string }>, res: Response
     sendError(res, "Not implemented", 501);
 };
 
+export const generateUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { conversationId, fileName, mimeType } = req.body || {};
+        if (!conversationId || !fileName || !mimeType) {
+            sendError(res, "conversationId, fileName and mimeType are required", 400);
+            return;
+        }
+
+        const userId = req.user!.id;
+        const isParticipant = await checkUserInConversation(conversationId, userId);
+        if (!isParticipant) {
+            sendError(res, "Unauthorized to access this conversation", 403);
+            return;
+        }
+
+        const data = await generatePresignedUploadUrl(conversationId, fileName, mimeType);
+        sendSuccess(res, "Presigned URL generated successfully", data, 200);
+    } catch (error: any) {
+        console.error("Error in generateUploadUrl:", error);
+        sendError(res, error.message || 'Failed to generate upload URL', 500);
+    }
+};
+
 export const sendMessage = async (req: Request<{ conversationId: string }>, res: Response): Promise<void> => {
     try {
         const userId = req.user!.id;
         const { conversationId } = req.params;
-        const { content } = req.body || {};
+        const { content, attachmentUrl, attachmentType, attachmentName } = req.body || {};
 
-        if (!content) {
-            sendError(res, "Content is required", 400);
+        if (!content && !attachmentUrl) {
+            sendError(res, "Content or attachment is required", 400);
             return;
         }
 
-        const message = await createMessage(conversationId, userId, content);
+        const message = await createMessage(
+            conversationId, 
+            userId, 
+            content, 
+            attachmentUrl, 
+            attachmentType, 
+            attachmentName
+        );
         sendSuccess(res, "Message sent successfully", message, 201);
     } catch (error: any) {
         console.error("Error in sendMessage:", error);
@@ -50,14 +82,21 @@ export const sendDirectMessage = async (req: Request<{ userId: string }>, res: R
     try {
         const senderId = req.user!.id;
         const recipientId = req.params.userId;
-        const { content } = req.body || {};
+        const { content, attachmentUrl, attachmentType, attachmentName } = req.body || {};
 
-        if (!content) {
-            sendError(res, "Content is required", 400);
+        if (!content && !attachmentUrl) {
+            sendError(res, "Content or attachment is required", 400);
             return;
         }
 
-        const result = await sendDirectMessageService(senderId, recipientId, content);
+        const result = await sendDirectMessageService(
+            senderId, 
+            recipientId, 
+            content, 
+            attachmentUrl, 
+            attachmentType, 
+            attachmentName
+        );
         sendSuccess(res, "Message sent successfully", result, 201);
     } catch (error: any) {
         console.error("Error in sendDirectMessage:", error);

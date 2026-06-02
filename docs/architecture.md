@@ -39,6 +39,13 @@ Type-safe queries with migration support. Easy to swap the underlying adapter if
 **Message Ordering**  
 Messages are ordered by `created_at` (DB-assigned server timestamp), not client timestamp, to prevent clock skew issues.
 
+### Media Storage
+**Cloudflare R2 (S3-Compatible)**
+To handle media attachments (images, videos, files), we use Cloudflare R2.
+- **Security**: The bucket is kept strictly **private**. We do not use public unguessable URLs.
+- **Upload Flow**: The Node.js backend generates short-lived **Presigned PUT URLs**. The React frontend uploads the file directly to R2, bypassing the Node server to save bandwidth.
+- **Download Flow**: When fetching messages, the backend generates short-lived **Presigned GET URLs** for any attachments, ensuring only authenticated users can view the media and preventing permanent hotlinking.
+
 ## 3. Backend Architecture
 
 ### Core Layers
