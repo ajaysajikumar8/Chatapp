@@ -27,11 +27,12 @@ interface ChatState {
   updateParticipantLastReadAt: (conversationId: string, userId: string, lastReadAt: string) => void;
   updateMessageLocally: (message: Message) => void;
   deleteMessageLocally: (conversationId: string, messageId: string) => void;
+  replaceOptimisticMessage: (conversationId: string, optimisticId: string, message: Message) => void;
 
   // Thunks
   fetchConversations: () => Promise<void>;
   fetchMessages: (conversationId: string, cursor?: string) => Promise<void>;
-  sendMessage: (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }) => Promise<void>;
+  sendMessage: (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }, optimisticId?: string) => Promise<void>;
   startConversation: (user: User) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
 }
@@ -167,6 +168,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
   }),
 
+  replaceOptimisticMessage: (conversationId, optimisticId, message) => set((state) => {
+    const currentMessages = state.messages[conversationId] || [];
+    
+    // If the real message already arrived via socket, just remove the optimistic one
+    if (currentMessages.some((m) => m.id === message.id)) {
+      const filteredMessages = currentMessages.filter((m) => m.id !== optimisticId);
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: filteredMessages,
+        }
+      };
+    }
+    
+    const index = currentMessages.findIndex((m) => m.id === optimisticId);
+    if (index !== -1) {
+      const newMessages = [...currentMessages];
+      newMessages[index] = message;
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: newMessages,
+        },
+        conversations: state.conversations.map((c) => {
+          if (c.id === conversationId && c.messages && c.messages.length > 0 && c.messages[0].id === optimisticId) {
+            return { ...c, messages: [message] };
+          }
+          return c;
+        }),
+      };
+    }
+    return state;
+  }),
+
   setSelectedConversationId: (id) => set({ selectedConversationId: id }),
 
   updateUserPresence: (userId, status, lastSeen) => set((state) => ({
@@ -268,7 +303,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }) => {
+  sendMessage: async (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }, optimisticId?: string) => {
     try {
       const payload = {
         content,
@@ -282,20 +317,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const response = await api.post(`/messages/direct/${recipientId}`, payload);
         const { message, conversation } = response.data.data;
 
-        const newConversations = get().conversations.map(c => c.id === conversationId ? conversation : c);
-        get().setConversations(newConversations);
+        set((state) => {
+          const newConversations = state.conversations.map(c => c.id === conversationId ? conversation : c);
+          const presence: Record<string, { status: string; lastSeen?: string }> = {};
+          conversation.participants.forEach((p: any) => {
+            if (p.user) {
+              presence[p.user.id] = { status: p.user.status, lastSeen: p.user.lastSeen };
+            }
+          });
+          
+          return {
+            conversations: newConversations,
+            userPresence: { ...state.userPresence, ...presence },
+            hasFetchedHistory: { ...state.hasFetchedHistory, [conversation.id]: true }
+          };
+        });
+        
         get().setSelectedConversationId(conversation.id);
-        get().addMessage(message);
-        set((state) => ({
-          hasFetchedHistory: { ...state.hasFetchedHistory, [conversation.id]: true }
-        }));
+        if (optimisticId) {
+          get().replaceOptimisticMessage(conversation.id, optimisticId, message);
+        } else {
+          get().addMessage(message);
+        }
       } else {
         const response = await api.post(`/messages/${conversationId}`, payload);
-        get().addMessage(response.data.data);
+        if (optimisticId) {
+          get().replaceOptimisticMessage(conversationId, optimisticId, response.data.data);
+        } else {
+          get().addMessage(response.data.data);
+        }
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Failed to send message:', error);
+      if (optimisticId && !conversationId.startsWith('temp_')) {
+        set(state => {
+           const currentMessages = state.messages[conversationId] || [];
+           const index = currentMessages.findIndex(m => m.id === optimisticId);
+           if (index !== -1) {
+              const newMessages = [...currentMessages];
+              newMessages[index] = { ...newMessages[index], status: 'error' };
+              return { messages: { ...state.messages, [conversationId]: newMessages } };
+           }
+           return state;
+        });
+      }
       throw error;
     }
   },

@@ -18,6 +18,8 @@ export interface Message {
   attachmentName?: string;
   createdAt: string;
   sender?: User;
+  optimisticId?: string;
+  status?: 'sending' | 'sent' | 'error';
 }
 
 export interface ConversationParticipant {

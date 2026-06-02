@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, MoreVertical, Image as ImageIcon, CheckCheck, ChevronDown, Paperclip, X, File as FileIcon, Download, PlayCircle, Play, ZoomIn, ZoomOut, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Image as ImageIcon, CheckCheck, ChevronDown, Paperclip, X, File as FileIcon, Download, Play, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import type { Conversation, Message } from '../../types/chat';
@@ -246,10 +246,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onNewMessage,
 }) => {
   const [inputText, setInputText] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const isSendingRef = useRef(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -272,13 +271,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       if (oldIndex > 0) {
         // Items were prepended
         setFirstItemIndex(prev => prev - oldIndex);
-      } else {
-        // Switched conversation
-        setFirstItemIndex(1000000 - messages.length);
       }
       firstMessageIdRef.current = messages[0].id;
     }
-  }, [messages, conversation?.id]);
+  }, [messages]);
   
   const { 
     userPresence, 
@@ -286,7 +282,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     hasMoreMessages, 
     cursors, 
     isFetchingMore, 
-    fetchMessages 
+    fetchMessages,
+    addMessage,
+    hasFetchedHistory
   } = useChatStore();
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   
@@ -297,23 +295,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+        setPreviewUrl(URL.createObjectURL(file));
+      } else {
+        setPreviewUrl(null);
+      }
     }
   };
 
   const removeSelectedFile = () => {
     setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const handleSend = async () => {
     const text = inputText.trim();
     if ((!text && !selectedFile) || isSendingRef.current || !conversation) return;
     
     isSendingRef.current = true;
-    setIsSending(true);
-    if (selectedFile) setIsUploading(true);
 
     const otherParticipant = conversation.participants.find(p => p.userId !== currentUserId) || conversation.participants[0];
     if (typingTimeoutRef.current) {
@@ -325,44 +339,61 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       isTypingRef.current = false;
     }
 
-    try {
-      let attachmentData: { url: string, type: string, name: string } | undefined;
+    const optimisticId = `temp_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const tempFile = selectedFile;
+    
+    const optimisticMessage: Message = {
+      id: optimisticId,
+      conversationId: conversation.id,
+      senderId: currentUserId,
+      content: text || undefined,
+      attachmentUrl: tempFile ? URL.createObjectURL(tempFile) : undefined,
+      attachmentType: tempFile?.type,
+      attachmentName: tempFile?.name,
+      createdAt: new Date().toISOString(),
+      optimisticId,
+      status: 'sending'
+    };
 
-      if (selectedFile) {
-        // Request presigned URL
-        const presignedRes = await api.post('/messages/presigned-url', {
-          conversationId: conversation.id,
-          fileName: selectedFile.name,
-          mimeType: selectedFile.type
-        });
-        const { uploadUrl, fileKey } = presignedRes.data.data;
+    addMessage(optimisticMessage);
+    
+    setInputText('');
+    removeSelectedFile(); // This will clear the previewUrl and revoke it
+    isSendingRef.current = false;
 
-        // Direct upload to R2
-        await fetch(uploadUrl, {
-          method: 'PUT',
-          body: selectedFile,
-          headers: {
-            'Content-Type': selectedFile.type
-          }
-        });
+    // Run actual upload and send in background
+    (async () => {
+      try {
+        let attachmentData: { url: string, type: string, name: string } | undefined;
 
-        attachmentData = {
-          url: fileKey,
-          type: selectedFile.type,
-          name: selectedFile.name
-        };
+        if (tempFile) {
+          const presignedRes = await api.post('/messages/presigned-url', {
+            conversationId: conversation.id,
+            fileName: tempFile.name,
+            mimeType: tempFile.type
+          });
+          const { uploadUrl, fileKey } = presignedRes.data.data;
+
+          await fetch(uploadUrl, {
+            method: 'PUT',
+            body: tempFile,
+            headers: {
+              'Content-Type': tempFile.type
+            }
+          });
+
+          attachmentData = {
+            url: fileKey,
+            type: tempFile.type,
+            name: tempFile.name
+          };
+        }
+
+        await sendMessage(conversation.id, text, attachmentData, optimisticId);
+      } catch (err) {
+        console.error("Failed to send message with attachment:", err);
       }
-
-      await sendMessage(conversation.id, text, attachmentData);
-      setInputText('');
-      removeSelectedFile();
-    } catch (err) {
-      console.error("Failed to send message with attachment:", err);
-    } finally {
-      isSendingRef.current = false;
-      setIsSending(false);
-      setIsUploading(false);
-    }
+    })();
   };
 
   const handleDownloadClick = async (e: React.MouseEvent, msgId: string) => {
@@ -547,11 +578,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       {/* Messages */}
       <div className="flex-1 bg-bg-base overflow-hidden relative">
-        <Virtuoso
+        {!conversation || !hasFetchedHistory[conversation.id] ? (
+          <div className="flex-1 flex items-center justify-center h-full">
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <Virtuoso
           ref={virtuosoRef}
           data={messages}
           firstItemIndex={firstItemIndex}
-          initialTopMostItemIndex={messages.length > 0 ? messages.length - 1 : 0} // Start at the bottom
+          initialTopMostItemIndex={messages.length > 0 ? { index: firstItemIndex + messages.length - 1, align: 'end' } : 0}
+          alignToBottom={true}
           startReached={loadMoreMessages}
           atBottomStateChange={(bottom) => {
             setIsAtBottom(bottom);
@@ -695,6 +732,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             );
           }}
         />
+        )}
 
         {/* Scroll to Bottom FAB */}
         {!isAtBottom && (
@@ -725,7 +763,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <div className="flex items-center gap-3 overflow-hidden">
               {selectedFile.type.startsWith('image/') ? (
                 <div className="w-10 h-10 rounded bg-bg-surface-hover flex items-center justify-center overflow-hidden shrink-0">
-                  <img src={URL.createObjectURL(selectedFile)} alt="preview" className="w-full h-full object-cover" />
+                  <img src={previewUrl || ''} alt="preview" className="w-full h-full object-cover" />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded bg-primary/10 text-primary-light flex items-center justify-center shrink-0">
@@ -737,7 +775,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <span className="text-xs text-text-subtle">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
               </div>
             </div>
-            <button onClick={removeSelectedFile} disabled={isUploading} className="p-1.5 rounded-full hover:bg-bg-surface-hover text-text-muted transition-colors shrink-0">
+            <button onClick={removeSelectedFile} className="p-1.5 rounded-full hover:bg-bg-surface-hover text-text-muted transition-colors shrink-0">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -770,14 +808,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           
           <button
             onClick={handleSend}
-            disabled={(!inputText.trim() && !selectedFile) || isSending || isUploading}
+            disabled={!inputText.trim() && !selectedFile}
             className="p-2 bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:hover:bg-primary text-white rounded-lg transition-colors shrink-0 relative"
           >
-            {isUploading ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
+            <Send className="w-4 h-4" />
           </button>
         </div>
       </div>
