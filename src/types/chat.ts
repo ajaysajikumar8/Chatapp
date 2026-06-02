@@ -12,7 +12,10 @@ export interface Message {
   id: string;
   conversationId: string;
   senderId: string;
-  content: string;
+  content?: string;
+  attachmentUrl?: string;
+  attachmentType?: string;
+  attachmentName?: string;
   createdAt: string;
   sender?: User;
 }

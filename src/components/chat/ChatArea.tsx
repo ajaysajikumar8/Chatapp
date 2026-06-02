@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Send, MoreVertical, Image as ImageIcon, CheckCheck, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Image as ImageIcon, CheckCheck, ChevronDown, Paperclip, X, File as FileIcon, Download, PlayCircle } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import type { Conversation, Message } from '../../types/chat';
 import { useChatStore } from '../../store/useChatStore';
 import { formatMessageGroupDate } from '../../utils/dateUtils';
 import { emitTypingStatus } from '../../services/socket';
+import api from '../../services/api';
 
 const EMPTY_ARRAY: string[] = [];
 
@@ -28,6 +29,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 }) => {
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const lastEmitTimeRef = useRef(0);
@@ -69,11 +76,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     conversation ? state.typingStatus[conversation.id] || EMPTY_ARRAY : EMPTY_ARRAY
   );
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const removeSelectedFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || isSending || !conversation) return;
-    setInputText('');
+    if ((!text && !selectedFile) || isSendingRef.current || !conversation) return;
+    
+    isSendingRef.current = true;
     setIsSending(true);
+    if (selectedFile) setIsUploading(true);
 
     const otherParticipant = conversation.participants.find(p => p.userId !== currentUserId) || conversation.participants[0];
     if (typingTimeoutRef.current) {
@@ -86,9 +107,42 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
 
     try {
-      await sendMessage(conversation.id, text);
+      let attachmentData: { url: string, type: string, name: string } | undefined;
+
+      if (selectedFile) {
+        // Request presigned URL
+        const presignedRes = await api.post('/messages/presigned-url', {
+          conversationId: conversation.id,
+          fileName: selectedFile.name,
+          mimeType: selectedFile.type
+        });
+        const { uploadUrl, fileKey } = presignedRes.data.data;
+
+        // Direct upload to R2
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          body: selectedFile,
+          headers: {
+            'Content-Type': selectedFile.type
+          }
+        });
+
+        attachmentData = {
+          url: fileKey,
+          type: selectedFile.type,
+          name: selectedFile.name
+        };
+      }
+
+      await sendMessage(conversation.id, text, attachmentData);
+      setInputText('');
+      removeSelectedFile();
+    } catch (err) {
+      console.error("Failed to send message with attachment:", err);
     } finally {
+      isSendingRef.current = false;
       setIsSending(false);
+      setIsUploading(false);
     }
   };
 
@@ -325,9 +379,36 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       }`}
                     >
                       <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-                        <span className="text-left leading-relaxed max-w-full break-words">
-                          {msg.content}
-                        </span>
+                        <div className="flex flex-col gap-2 max-w-full">
+                          {msg.attachmentUrl && (
+                            <div className="mb-1 rounded-lg overflow-hidden max-w-[280px]">
+                              {msg.attachmentType?.startsWith('image/') ? (
+                                <img src={msg.attachmentUrl} alt={msg.attachmentName || 'Image'} className="w-full h-auto object-cover rounded-lg" loading="lazy" />
+                              ) : msg.attachmentType?.startsWith('video/') ? (
+                                <video src={msg.attachmentUrl} controls className="w-full h-auto rounded-lg max-h-[300px]" />
+                              ) : (
+                                <a 
+                                  href={msg.attachmentUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className={`flex items-center gap-2 p-3 rounded-lg ${isMine ? 'bg-primary-hover/50 text-white hover:bg-primary-hover' : 'bg-bg-surface border border-border-subtle hover:bg-bg-surface-hover text-text-base'} transition-colors`}
+                                >
+                                  <FileIcon className="w-8 h-8 shrink-0 opacity-80" />
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-sm font-medium truncate">{msg.attachmentName || 'Download File'}</span>
+                                    <span className="text-xs opacity-70 uppercase">{msg.attachmentType?.split('/')[1] || 'FILE'}</span>
+                                  </div>
+                                  <Download className="w-4 h-4 ml-auto opacity-70" />
+                                </a>
+                              )}
+                            </div>
+                          )}
+                          {msg.content && (
+                            <span className="text-left leading-relaxed max-w-full break-words">
+                              {msg.content}
+                            </span>
+                          )}
+                        </div>
                         
                         <div className={`flex items-center justify-end gap-1 shrink-0 ml-auto pb-[1px] ${isMine ? 'text-white/80' : 'text-text-subtle'}`}>
                           <span className="text-[10.5px] font-medium leading-none tracking-wide">
@@ -379,9 +460,38 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       {/* Input */}
       <div className="p-4 bg-bg-base border-t border-border-subtle shrink-0">
+        {selectedFile && (
+          <div className="mb-3 p-3 bg-bg-surface border border-border-subtle rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3 overflow-hidden">
+              {selectedFile.type.startsWith('image/') ? (
+                <div className="w-10 h-10 rounded bg-bg-surface-hover flex items-center justify-center overflow-hidden shrink-0">
+                  <img src={URL.createObjectURL(selectedFile)} alt="preview" className="w-full h-full object-cover" />
+                </div>
+              ) : (
+                <div className="w-10 h-10 rounded bg-primary/10 text-primary-light flex items-center justify-center shrink-0">
+                  <FileIcon className="w-5 h-5" />
+                </div>
+              )}
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-medium text-text-base truncate">{selectedFile.name}</span>
+                <span className="text-xs text-text-subtle">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+            </div>
+            <button onClick={removeSelectedFile} disabled={isUploading} className="p-1.5 rounded-full hover:bg-bg-surface-hover text-text-muted transition-colors shrink-0">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+        
         <div className="flex items-end gap-2 bg-bg-surface rounded-xl p-2 border border-border-subtle focus-within:border-primary-light/50 focus-within:ring-1 focus-within:ring-primary-light/50 transition-all">
-          <button className="p-2 text-text-muted hover:text-primary-light hover:bg-bg-surface-hover rounded-lg transition-colors shrink-0">
+          <input type="file" ref={imageInputRef} onChange={handleFileSelect} accept="image/*,video/*" className="hidden" />
+          <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
+          
+          <button onClick={() => imageInputRef.current?.click()} className="p-2 text-text-muted hover:text-primary-light hover:bg-bg-surface-hover rounded-lg transition-colors shrink-0" title="Attach Image or Video">
             <ImageIcon className="w-5 h-5" />
+          </button>
+          <button onClick={() => fileInputRef.current?.click()} className="p-2 -ml-1 text-text-muted hover:text-primary-light hover:bg-bg-surface-hover rounded-lg transition-colors shrink-0" title="Attach File">
+            <Paperclip className="w-5 h-5" />
           </button>
           
           <textarea
@@ -400,10 +510,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           
           <button
             onClick={handleSend}
-            disabled={!inputText.trim() || isSending}
-            className="p-2 bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:hover:bg-primary text-white rounded-lg transition-colors shrink-0"
+            disabled={(!inputText.trim() && !selectedFile) || isSending || isUploading}
+            className="p-2 bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:hover:bg-primary text-white rounded-lg transition-colors shrink-0 relative"
           >
-            <Send className="w-4 h-4" />
+            {isUploading ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
           </button>
         </div>
       </div>

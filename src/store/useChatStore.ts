@@ -31,7 +31,7 @@ interface ChatState {
   // Thunks
   fetchConversations: () => Promise<void>;
   fetchMessages: (conversationId: string, cursor?: string) => Promise<void>;
-  sendMessage: (conversationId: string, content: string) => Promise<void>;
+  sendMessage: (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }) => Promise<void>;
   startConversation: (user: User) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
 }
@@ -268,11 +268,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId: string, content: string) => {
+  sendMessage: async (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }) => {
     try {
+      const payload = {
+        content,
+        attachmentUrl: attachment?.url,
+        attachmentType: attachment?.type,
+        attachmentName: attachment?.name
+      };
+
       if (conversationId.startsWith('temp_')) {
         const recipientId = conversationId.replace('temp_', '');
-        const response = await api.post(`/messages/direct/${recipientId}`, { content });
+        const response = await api.post(`/messages/direct/${recipientId}`, payload);
         const { message, conversation } = response.data.data;
 
         const newConversations = get().conversations.map(c => c.id === conversationId ? conversation : c);
@@ -283,7 +290,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           hasFetchedHistory: { ...state.hasFetchedHistory, [conversation.id]: true }
         }));
       } else {
-        const response = await api.post(`/messages/${conversationId}`, { content });
+        const response = await api.post(`/messages/${conversationId}`, payload);
         get().addMessage(response.data.data);
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
