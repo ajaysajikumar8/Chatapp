@@ -128,7 +128,6 @@ export const ChatPage: React.FC = () => {
           isVisible={selectedConversationId === null}
         />
         <ChatArea
-          key={selectedConversationId || 'empty'}
           conversation={selectedConversation}
           messages={conversationMessages}
           onBack={() => setSelectedConversationId(null)}

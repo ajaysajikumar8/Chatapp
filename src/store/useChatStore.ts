@@ -6,6 +6,7 @@ import { useAuthStore } from './useAuthStore';
 interface ChatState {
   conversations: Conversation[];
   messages: Record<string, Message[]>;
+  firstItemIndex: Record<string, number>;
   hasFetchedHistory: Record<string, boolean>;
   hasMoreMessages: Record<string, boolean>;
   cursors: Record<string, string | null>;
@@ -43,6 +44,7 @@ const typingTimeouts: Record<string, ReturnType<typeof setTimeout>> = {};
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   messages: {},
+  firstItemIndex: {},
   hasFetchedHistory: {},
   hasMoreMessages: {},
   cursors: {},
@@ -106,17 +108,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
   }),
 
-  setMessages: (conversationId, messages, nextCursor, hasMore, _prepend) => set((state) => {
+  setMessages: (conversationId, messages, nextCursor, hasMore, prepend) => set((state) => {
     const existingMessages = state.messages[conversationId] || [];
     const messageMap = new Map(existingMessages.map(m => [m.id, m]));
-    messages.forEach(m => messageMap.set(m.id, m));
+    let newItemsCount = 0;
+    messages.forEach(m => {
+      if (!messageMap.has(m.id)) {
+        newItemsCount++;
+        messageMap.set(m.id, m);
+      }
+    });
     
     const mergedMessages = Array.from(messageMap.values()).sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 
+    const currentFirstIndex = state.firstItemIndex[conversationId] ?? (1000000 - mergedMessages.length);
+    const newFirstIndex = (prepend && existingMessages.length > 0)
+      ? currentFirstIndex - newItemsCount
+      : currentFirstIndex;
+
     return {
       messages: { ...state.messages, [conversationId]: mergedMessages },
+      firstItemIndex: { ...state.firstItemIndex, [conversationId]: newFirstIndex },
       hasFetchedHistory: { ...state.hasFetchedHistory, [conversationId]: true },
       cursors: { ...state.cursors, [conversationId]: nextCursor !== undefined ? nextCursor : state.cursors[conversationId] },
       hasMoreMessages: { ...state.hasMoreMessages, [conversationId]: hasMore !== undefined ? hasMore : state.hasMoreMessages[conversationId] },

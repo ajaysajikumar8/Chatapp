@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ArrowLeft, Send, MoreVertical, Image as ImageIcon, CheckCheck, ChevronDown, Paperclip, X, File as FileIcon, Download, Play, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import type { VirtuosoHandle } from 'react-virtuoso';
@@ -260,22 +260,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
 
-  // Manage firstItemIndex safely to avoid shifting on append
-  const [firstItemIndex, setFirstItemIndex] = useState(() => 1000000 - (messages.length || 0));
-  const firstMessageIdRef = useRef(messages[0]?.id);
+  const [prevConversationId, setPrevConversationId] = useState<string | undefined>(conversation?.id);
 
-  useEffect(() => {
-    if (!messages.length) return;
-    if (messages[0].id !== firstMessageIdRef.current) {
-      const oldIndex = messages.findIndex(m => m.id === firstMessageIdRef.current);
-      if (oldIndex > 0) {
-        // Items were prepended
-        setFirstItemIndex(prev => prev - oldIndex);
-      }
-      firstMessageIdRef.current = messages[0].id;
+  if (conversation?.id !== prevConversationId) {
+    setPrevConversationId(conversation?.id);
+    setInputText('');
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
     }
-  }, [messages]);
-  
+    setIsAtBottom(true);
+    setUnreadWhileScrolled(0);
+  }
+
   const { 
     userPresence, 
     sendMessage, 
@@ -284,9 +282,46 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     isFetchingMore, 
     fetchMessages,
     addMessage,
-    hasFetchedHistory
+    hasFetchedHistory,
+    firstItemIndex: storeFirstItemIndex
   } = useChatStore();
+  
+  const firstItemIndex = conversation ? (storeFirstItemIndex[conversation.id] ?? (1000000 - (messages.length || 0))) : 0;
+  
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+
+  const stableInitialTopMostItemIndex = useMemo(() => {
+    return messages.length > 0 ? { index: firstItemIndex + messages.length - 1, align: 'end' as const } : 0;
+  }, [messages.length, firstItemIndex]);
+
+  const lastMessageIdRef = useRef(messages[messages.length - 1]?.id);
+
+  useEffect(() => {
+    if (!messages.length) return;
+    const lastMsg = messages[messages.length - 1];
+    
+    if (lastMsg.id !== lastMessageIdRef.current) {
+      // If a NEW message was appended at the very bottom and it's from the current user,
+      // force scroll down to show it. This avoids the followOutput bug on historical fetch.
+      if (lastMsg.senderId === currentUserId) {
+        virtuosoRef.current?.scrollToIndex({
+          index: firstItemIndex + messages.length - 1,
+          align: 'end',
+          behavior: 'smooth'
+        });
+      }
+      lastMessageIdRef.current = lastMsg.id;
+    }
+  }, [messages, firstItemIndex, currentUserId]);
+
+  // Clean up typing timeouts on conversation switch
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [conversation?.id]);
   
   // Use a targeted selector to prevent unnecessary re-renders when other conversations update typing status
   const typingUsers = useChatStore(state => 
@@ -432,19 +467,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Call onNewMessage when new messages arrive so ChatPage can mark as read
   const prevMessagesLengthRef = React.useRef(messages.length);
+  const prevLastMessageIdRefForUnread = React.useRef(messages[messages.length - 1]?.id);
+
   useEffect(() => {
     if (messages.length > prevMessagesLengthRef.current) {
-      onNewMessage();
-      
-      const newMessagesCount = messages.length - prevMessagesLengthRef.current;
-      if (!isAtBottom) {
-        const incomingNewMessages = messages.slice(-newMessagesCount).filter(m => m.senderId !== currentUserId);
-        if (incomingNewMessages.length > 0) {
-          setUnreadWhileScrolled(prev => prev + incomingNewMessages.length);
+      const currentLastMessage = messages[messages.length - 1];
+      const isAppend = currentLastMessage?.id !== prevLastMessageIdRefForUnread.current;
+
+      if (isAppend) {
+        onNewMessage();
+        
+        if (!isAtBottom) {
+          let appendedCount = 0;
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].id === prevLastMessageIdRefForUnread.current) break;
+            if (messages[i].senderId !== currentUserId) {
+              appendedCount++;
+            }
+          }
+          if (appendedCount > 0) {
+            setUnreadWhileScrolled(prev => prev + appendedCount);
+          }
         }
       }
     }
     prevMessagesLengthRef.current = messages.length;
+    prevLastMessageIdRefForUnread.current = messages[messages.length - 1]?.id;
   }, [messages, onNewMessage, isAtBottom, currentUserId]);
 
   const loadMoreMessages = useCallback(() => {
@@ -507,6 +555,49 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       typingTimeoutRef.current = null;
     }, 2000);
   };
+
+  const messageIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < messages.length; i++) {
+      map.set(messages[i].id, i);
+    }
+    return map;
+  }, [messages]);
+
+  const virtuosoComponents = useMemo(() => {
+    if (!conversation) {
+      return {
+        Header: () => <div className="h-4" />,
+        Footer: () => <div className="h-4" />,
+      };
+    }
+    
+    const otherParticipant = conversation.participants.find(p => p.userId !== currentUserId) || conversation.participants[0];
+    const otherUserId = otherParticipant.user.id;
+    const otherUserDisplayName = otherParticipant.user.displayName;
+    
+    return {
+      Header: () => <div className="h-4" />,
+      Footer: () => (
+        typingUsers.includes(otherUserId) ? (
+          <div className="flex gap-3 max-w-[85%] pt-2 pb-4 px-4">
+            <div className="shrink-0 w-8">
+              <div className="w-8 h-8 rounded-full bg-primary/20 text-primary-light flex items-center justify-center text-xs font-medium border border-primary/30">
+                {otherUserDisplayName.charAt(0).toUpperCase()}
+              </div>
+            </div>
+            <div className="flex flex-col items-start">
+              <div className="px-4 py-3 rounded-2xl bg-bg-surface-hover border border-border-subtle rounded-tl-sm flex items-center gap-1.5 h-[44px]">
+                <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
+                <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
+                <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
+              </div>
+            </div>
+          </div>
+        ) : <div className="h-4"></div>
+      ),
+    };
+  }, [conversation, typingUsers, currentUserId]);
 
   if (!conversation) {
     return (
@@ -584,12 +675,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         ) : (
           <Virtuoso
+          key={conversation?.id || 'empty'}
           ref={virtuosoRef}
           data={messages}
           firstItemIndex={firstItemIndex}
-          initialTopMostItemIndex={messages.length > 0 ? { index: firstItemIndex + messages.length - 1, align: 'end' } : 0}
+          initialTopMostItemIndex={stableInitialTopMostItemIndex}
           alignToBottom={true}
           startReached={loadMoreMessages}
+          atBottomThreshold={10}
           atBottomStateChange={(bottom) => {
             setIsAtBottom(bottom);
             if (bottom) {
@@ -597,46 +690,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             }
           }}
           followOutput={(isAtBottom: boolean) => {
-            if (messages.length > 0 && messages[messages.length - 1].senderId === currentUserId) {
-              return 'smooth';
-            }
             return isAtBottom ? 'smooth' : false;
           }}
           className="h-full w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-          components={{
-            Header: () => <div className="h-4" />,
-            Footer: () => (
-              conversation && typingUsers.includes(otherUser.id) ? (
-                <div className="flex gap-3 max-w-[85%] mt-2 pb-4 px-4">
-                  <div className="shrink-0 w-8">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 text-primary-light flex items-center justify-center text-xs font-medium border border-primary/30">
-                      {otherUser.displayName.charAt(0).toUpperCase()}
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-start">
-                    <div className="px-4 py-3 rounded-2xl bg-bg-surface-hover border border-border-subtle rounded-tl-sm flex items-center gap-1.5 h-[44px]">
-                      <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
-                      <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
-                      <div className="w-1.5 h-1.5 bg-text-subtle rounded-full typing-dot"></div>
-                    </div>
-                  </div>
-                </div>
-              ) : <div className="h-4"></div>
-            ),
-          }}
+          components={virtuosoComponents}
           itemContent={(_, msg) => {
-            const dataIndex = messages.findIndex(m => m.id === msg.id);
+            if (!msg) return null;
+            const dataIndex = messageIndexMap.get(msg.id) ?? -1;
+            if (dataIndex === -1) return null;
+
             const isMine = msg.senderId === currentUserId;
-            const showAvatar = !isMine && (dataIndex === 0 || messages[dataIndex - 1].senderId !== msg.senderId);
+            const prevMsg = dataIndex > 0 ? messages[dataIndex - 1] : null;
+            const showAvatar = !isMine && (!prevMsg || prevMsg.senderId !== msg.senderId);
 
             const messageDateGroup = formatMessageGroupDate(msg.createdAt);
-            const previousMessageDateGroup = dataIndex > 0 ? formatMessageGroupDate(messages[dataIndex - 1].createdAt) : null;
+            const previousMessageDateGroup = prevMsg ? formatMessageGroupDate(prevMsg.createdAt) : null;
             const showDateSeparator = messageDateGroup !== previousMessageDateGroup;
 
             return (
               <div className="pb-6 px-4">
                 {showDateSeparator && (
-                  <div className="flex justify-center mb-4">
+                  <div className="flex justify-center pb-4">
                     <div className="px-3 py-1 bg-bg-surface border border-border-subtle rounded-full text-xs font-medium text-text-subtle shadow-sm">
                       {messageDateGroup}
                     </div>
@@ -668,7 +742,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
                         <div className="flex flex-col gap-2 max-w-full">
                           {msg.attachmentUrl && (
-                            <div className="mb-1 rounded-lg overflow-hidden max-w-[280px]">
+                            <div className="pb-1 rounded-lg overflow-hidden max-w-[280px]">
                               {msg.attachmentType?.startsWith('image/') ? (
                                 <div className="cursor-pointer" onClick={() => setActiveMediaId(msg.id)}>
                                   <ImageWithRetry src={msg.attachmentUrl} msgId={msg.id} alt={msg.attachmentName || 'Image'} className="w-full h-auto object-cover rounded-lg" />
