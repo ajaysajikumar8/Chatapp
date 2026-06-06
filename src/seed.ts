@@ -5,8 +5,12 @@ async function main() {
   console.log("Seeding database...");
 
   // Find user1
-  const user1 = await prisma.user.findUnique({
-    where: { username: "user1" }
+  const user1 = await prisma.user.findFirst({
+    where: {
+      profile: {
+        username: "user1"
+      }
+    }
   });
 
   if (!user1) {
@@ -15,19 +19,30 @@ async function main() {
   }
 
   // Create user2 if not exists
-  let user2 = await prisma.user.findUnique({
-    where: { username: "user2" }
+  let user2 = await prisma.user.findFirst({
+    where: {
+      profile: {
+        username: "user2"
+      }
+    }
   });
 
   if (!user2) {
     const passwordHash = await bcrypt.hash("password123", 10);
     user2 = await prisma.user.create({
       data: {
-        username: "user2",
-        displayName: "User Two",
         email: "user2@example.com",
         passwordHash,
-        status: "ONLINE"
+        profile: {
+          create: {
+            username: "user2",
+            displayName: "User Two",
+            status: "ONLINE"
+          }
+        },
+        settings: {
+          create: {}
+        }
       }
     });
     console.log("Created user2");
@@ -96,7 +111,7 @@ async function main() {
     take: 6
   });
 
-  if (lastMessages.length >= 6) {
+  if (lastMessages.length >= 6 && lastMessages[5]) {
     const sixthLastMessageTime = lastMessages[5].createdAt;
     await prisma.conversationParticipant.update({
       where: {

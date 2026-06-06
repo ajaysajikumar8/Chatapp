@@ -3,18 +3,38 @@ import bcrypt from "bcrypt";
 
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 10);
-  const user1 = await prisma.user.upsert({
-    where: { username: "user1" },
-    update: { passwordHash },
-    create: {
-      username: "user1",
-      displayName: "User One",
-      email: "user1@example.com",
-      passwordHash,
-      status: "ONLINE"
+  let user1 = await prisma.user.findFirst({
+    where: {
+      profile: {
+        username: "user1"
+      }
     }
   });
-  console.log("Upserted user1:", user1.username);
+
+  if (user1) {
+    await prisma.user.update({
+      where: { id: user1.id },
+      data: { passwordHash }
+    });
+  } else {
+    user1 = await prisma.user.create({
+      data: {
+        email: "user1@example.com",
+        passwordHash,
+        profile: {
+          create: {
+            username: "user1",
+            displayName: "User One",
+            status: "ONLINE"
+          }
+        },
+        settings: {
+          create: {}
+        }
+      }
+    });
+  }
+  console.log("Upserted user1:", "user1");
   await prisma.$disconnect();
 }
 

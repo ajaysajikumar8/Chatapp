@@ -39,8 +39,8 @@ export const initSocket = (server: HTTPServer) => {
         
         // Update presence to ONLINE
         try {
-            await prisma.user.update({
-                where: { id: userId },
+            await prisma.userProfile.update({
+                where: { userId },
                 data: { status: "ONLINE" }
             });
             io.emit("user_presence_changed", { userId, status: "ONLINE" });
@@ -57,8 +57,8 @@ export const initSocket = (server: HTTPServer) => {
             if (isDisconnected) {
                 try {
                     const lastSeen = new Date();
-                    await prisma.user.update({
-                        where: { id: userId },
+                    await prisma.userProfile.update({
+                        where: { userId },
                         data: { status: "OFFLINE", lastSeen }
                     });
                     io.emit("user_presence_changed", { userId, status: "OFFLINE", lastSeen });

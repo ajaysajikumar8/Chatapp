@@ -37,7 +37,17 @@ export const getMessagesByConversationId = async (conversationId: string, userId
         where: { conversationId },
         include: {
             sender: {
-                select: { id: true, displayName: true, email: true },
+                select: {
+                    id: true,
+                    email: true,
+                    profile: {
+                        select: {
+                            displayName: true,
+                            username: true,
+                            profilePhotoUrl: true,
+                        }
+                    }
+                },
             },
         },
         take,
@@ -75,8 +85,10 @@ export const getMessagesByConversationId = async (conversationId: string, userId
         return msg;
     }));
 
+    const messagesMapped = messagesWithPresignedUrls.map(flattenMessageSender);
+
     return {
-        messages: messagesWithPresignedUrls,
+        messages: messagesMapped,
         nextCursor,
         hasMore
     };
@@ -123,6 +135,21 @@ const resolveAttachmentAndBroadcast = async (newMessage: any, conversationId: st
     return returnedMessage;
 };
 
+const flattenMessageSender = (msg: any) => {
+    if (!msg || !msg.sender) return msg;
+    const userProfile = msg.sender.profile;
+    return {
+        ...msg,
+        sender: {
+            id: msg.sender.id,
+            email: msg.sender.email || "",
+            displayName: userProfile?.displayName || "",
+            username: userProfile?.username || "",
+            profilePhotoUrl: userProfile?.profilePhotoUrl || null,
+        }
+    };
+};
+
 export const createMessage = async (
     conversationId: string, 
     senderId: string, 
@@ -134,6 +161,31 @@ export const createMessage = async (
     const isParticipant = await checkUserInConversation(conversationId, senderId);
     if (!isParticipant) {
         throw new Error("Unauthorized to access this conversation");
+    }
+
+    // Check if any block exists between sender and other participants
+    const otherParticipants = await prisma.conversationParticipant.findMany({
+        where: {
+            conversationId,
+            userId: { not: senderId }
+        }
+    });
+
+    const otherUserIds = otherParticipants.map(p => p.userId);
+
+    if (otherUserIds.length > 0) {
+        const blockExists = await prisma.block.findFirst({
+            where: {
+                OR: [
+                    { blockerId: senderId, blockedId: { in: otherUserIds } },
+                    { blockerId: { in: otherUserIds }, blockedId: senderId }
+                ]
+            }
+        });
+
+        if (blockExists) {
+            throw new Error("Cannot send messages. One of the users has blocked the other.");
+        }
     }
 
     const newMessage = await prisma.message.create({
@@ -149,14 +201,20 @@ export const createMessage = async (
             sender: {
                 select: {
                     id: true,
-                    displayName: true,
                     email: true,
+                    profile: {
+                        select: {
+                            displayName: true,
+                            username: true,
+                            profilePhotoUrl: true,
+                        }
+                    }
                 },
             },
         },
     });
 
-    const returnedMessage = await resolveAttachmentAndBroadcast(newMessage, conversationId, senderId);
+    const returnedMessage = await resolveAttachmentAndBroadcast(flattenMessageSender(newMessage), conversationId, senderId);
 
     return returnedMessage;
 };
@@ -169,6 +227,20 @@ export const sendDirectMessageService = async (
     attachmentType?: string,
     attachmentName?: string
 ) => {
+    // Check if either user has blocked the other
+    const blockExists = await prisma.block.findFirst({
+        where: {
+            OR: [
+                { blockerId: senderId, blockedId: recipientId },
+                { blockerId: recipientId, blockedId: senderId }
+            ]
+        }
+    });
+
+    if (blockExists) {
+        throw new Error("Cannot send messages. One of the users has blocked the other.");
+    }
+
     // 1. Get or create the conversation (sender is guaranteed to be a participant)
     const { conversation } = await createConversationService(senderId, recipientId);
 
@@ -185,12 +257,22 @@ export const sendDirectMessageService = async (
         },
         include: {
             sender: {
-                select: { id: true, displayName: true, email: true },
+                select: {
+                    id: true,
+                    email: true,
+                    profile: {
+                        select: {
+                            displayName: true,
+                            username: true,
+                            profilePhotoUrl: true,
+                        }
+                    }
+                },
             },
         },
     });
 
-    const returnedMessage = await resolveAttachmentAndBroadcast(newMessage, conversation.id, senderId);
+    const returnedMessage = await resolveAttachmentAndBroadcast(flattenMessageSender(newMessage), conversation.id, senderId);
 
     return { conversation, message: returnedMessage };
 };
@@ -215,11 +297,19 @@ export const updateMessageService = async (messageId: string, senderId: string, 
             sender: {
                 select: {
                     id: true,
-                    displayName: true,
+                    profile: {
+                        select: {
+                            displayName: true,
+                            username: true,
+                            profilePhotoUrl: true,
+                        }
+                    }
                 },
             },
         },
     });
+
+    const flattened = flattenMessageSender(updatedMessage);
 
     const participants = await prisma.conversationParticipant.findMany({
         where: { conversationId: message.conversationId }
@@ -227,10 +317,10 @@ export const updateMessageService = async (messageId: string, senderId: string, 
     
     const io = getIO();
     participants.forEach((p) => {
-        io.to(p.userId).emit("message_updated", updatedMessage);
+        io.to(p.userId).emit("message_updated", flattened);
     });
 
-    return updatedMessage;
+    return flattened;
 };
 
 export const deleteMessageService = async (messageId: string, senderId: string) => {

@@ -18,31 +18,45 @@ export const registerUser = async ({
     // 🔹 Normalize email
     const normalizedEmail = email.trim().toLowerCase();
 
-    // 🔹 Check existing user by email or username
-    const existingUser = await prisma.user.findFirst({
-        where: {
-            OR: [
-                { email: normalizedEmail },
-                { username }
-            ]
-        },
+    // 🔹 Check existing user by email
+    const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail }
     });
 
     if (existingUser) {
-        throw new Error("User with that email or username already exists");
+        throw new Error("User with that email already exists");
+    }
+
+    // 🔹 Check existing user by username
+    const existingProfile = await prisma.userProfile.findUnique({
+        where: { username }
+    });
+
+    if (existingProfile) {
+        throw new Error("User with that username already exists");
     }
 
     // 🔹 Hash password
     const passwordHash = await hashPassword(password);
 
-    // 🔹 Create user
+    // 🔹 Create user with nested profile and settings
     const user = await prisma.user.create({
         data: {
             email: normalizedEmail,
-            username,
-            displayName,
             passwordHash,
+            profile: {
+                create: {
+                    username,
+                    displayName,
+                }
+            },
+            settings: {
+                create: {}
+            }
         },
+        include: {
+            profile: true
+        }
     });
 
     // 🔹 Generate token
@@ -53,8 +67,8 @@ export const registerUser = async ({
         user: {
             id: user.id,
             email: user.email,
-            username: user.username,
-            displayName: user.displayName,
+            username: user.profile?.username || "",
+            displayName: user.profile?.displayName || "",
         },
     };
 };
@@ -72,6 +86,9 @@ export const loginUser = async ({
     // 🔹 Find user
     const user = await prisma.user.findUnique({
         where: { email: normalizedEmail },
+        include: {
+            profile: true
+        }
     });
 
     if (!user) {
@@ -93,8 +110,8 @@ export const loginUser = async ({
         user: {
             id: user.id,
             email: user.email,
-            username: user.username,
-            displayName: user.displayName,
+            username: user.profile?.username || "",
+            displayName: user.profile?.displayName || "",
         },
     };
 };

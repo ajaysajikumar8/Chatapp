@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const accountId = process.env.R2_ACCOUNT_ID;
@@ -71,4 +71,43 @@ export const generatePresignedDownloadUrl = async (fileKey: string): Promise<str
 
     // The read URL is valid for 5 minutes (300 seconds) for strict production security
     return await getSignedUrl(s3Client, command, { expiresIn: 300 });
+};
+
+/**
+ * Generates a presigned URL for the client to directly upload their profile photo to Cloudflare R2.
+ */
+export const generatePresignedAvatarUploadUrl = async (userId: string, extension: string, mimeType: string): Promise<{ uploadUrl: string, fileKey: string }> => {
+    if (!s3Client || !bucketName) {
+        throw new Error("R2 is not configured properly.");
+    }
+
+    const fileKey = `users/${userId}/avatars/avatar-${Date.now()}.${extension}`;
+
+    const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: fileKey,
+        ContentType: mimeType,
+    });
+
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 });
+
+    return { uploadUrl, fileKey };
+};
+
+/**
+ * Deletes a file from Cloudflare R2 given its key.
+ */
+export const deleteFileFromR2 = async (fileKey: string): Promise<void> => {
+    if (!s3Client || !bucketName) {
+        return;
+    }
+    try {
+        const command = new DeleteObjectCommand({
+            Bucket: bucketName,
+            Key: fileKey,
+        });
+        await s3Client.send(command);
+    } catch (err) {
+        console.error(`Failed to delete file from R2 for key: ${fileKey}`, err);
+    }
 };

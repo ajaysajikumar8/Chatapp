@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { generatePresignedDownloadUrl } from "./storage.service.js";
 
 export const getConversationsForUser = async (userId: string) => {
     const conversations = await prisma.conversation.findMany({
@@ -13,10 +14,16 @@ export const getConversationsForUser = async (userId: string) => {
                     user: {
                         select: {
                             id: true,
-                            displayName: true,
                             email: true,
-                            status: true,
-                            lastSeen: true,
+                            profile: {
+                                select: {
+                                    displayName: true,
+                                    username: true,
+                                    status: true,
+                                    lastSeen: true,
+                                    profilePhotoUrl: true,
+                                }
+                            }
                         },
                     },
                 },
@@ -44,12 +51,43 @@ export const getConversationsForUser = async (userId: string) => {
         unreadCountsRaw.map(row => [row.conversation_id, Number(row.count)])
     );
 
-    const conversationsWithUnread = conversations.map(conv => ({
-        ...conv,
-        unreadCount: unreadCountsMap.get(conv.id) || 0
+    const conversationsMapped = await Promise.all(conversations.map(async conv => {
+        const flattenedParticipants = await Promise.all(conv.participants.map(async p => {
+            const flattened = flattenParticipantUser(p);
+            if (flattened.user?.profilePhotoUrl) {
+                try {
+                    flattened.user.avatarUrl = await generatePresignedDownloadUrl(flattened.user.profilePhotoUrl);
+                } catch (err) {
+                    console.error("Error signing participant avatar", err);
+                }
+            }
+            return flattened;
+        }));
+        return {
+            ...conv,
+            participants: flattenedParticipants,
+            unreadCount: unreadCountsMap.get(conv.id) || 0
+        };
     }));
 
-    return conversationsWithUnread;
+    return conversationsMapped;
+};
+
+const flattenParticipantUser = (participant: any) => {
+    if (!participant || !participant.user) return participant;
+    const userProfile = participant.user.profile;
+    return {
+        ...participant,
+        user: {
+            id: participant.user.id,
+            email: participant.user.email,
+            displayName: userProfile?.displayName || "",
+            username: userProfile?.username || "",
+            status: userProfile?.status || "OFFLINE",
+            lastSeen: userProfile?.lastSeen || null,
+            profilePhotoUrl: userProfile?.profilePhotoUrl || null,
+        }
+    };
 };
 
 export const createConversationService = async (
@@ -65,11 +103,16 @@ export const createConversationService = async (
                 user: {
                     select: {
                         id: true,
-                        displayName: true,
                         email: true,
-                        status: true,
-                        lastSeen: true,
-                        username: true,
+                        profile: {
+                            select: {
+                                displayName: true,
+                                username: true,
+                                status: true,
+                                lastSeen: true,
+                                profilePhotoUrl: true,
+                            }
+                        }
                     },
                 },
             },
@@ -109,7 +152,24 @@ export const createConversationService = async (
     );
 
     if (exactMatch) {
-        return { conversation: exactMatch, isNew: false };
+        const flattenedParticipants = await Promise.all(exactMatch.participants.map(async p => {
+            const flattened = flattenParticipantUser(p);
+            if (flattened.user?.profilePhotoUrl) {
+                try {
+                    flattened.user.avatarUrl = await generatePresignedDownloadUrl(flattened.user.profilePhotoUrl);
+                } catch (err) {
+                    console.error("Error signing participant avatar", err);
+                }
+            }
+            return flattened;
+        }));
+        return { 
+            conversation: {
+                ...exactMatch,
+                participants: flattenedParticipants
+            }, 
+            isNew: false 
+        };
     }
 
     const participantData = isSelfConversation
@@ -125,7 +185,25 @@ export const createConversationService = async (
         include: includeQuery,
     });
 
-    return { conversation: newConversation, isNew: true };
+    const flattenedParticipants = await Promise.all(newConversation.participants.map(async p => {
+        const flattened = flattenParticipantUser(p);
+        if (flattened.user?.profilePhotoUrl) {
+            try {
+                flattened.user.avatarUrl = await generatePresignedDownloadUrl(flattened.user.profilePhotoUrl);
+            } catch (err) {
+                console.error("Error signing participant avatar", err);
+            }
+        }
+        return flattened;
+    }));
+
+    return { 
+        conversation: {
+            ...newConversation,
+            participants: flattenedParticipants
+        }, 
+        isNew: true 
+    };
 };
 
 export const markConversationAsRead = async (conversationId: string, userId: string) => {
