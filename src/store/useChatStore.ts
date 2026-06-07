@@ -29,6 +29,8 @@ interface ChatState {
   updateMessageLocally: (message: Message) => void;
   deleteMessageLocally: (conversationId: string, messageId: string) => void;
   replaceOptimisticMessage: (conversationId: string, optimisticId: string, message: Message) => void;
+  updateConversationBlockStatus: (conversationId: string, isBlockedByMe: boolean) => void;
+  updateConversationBlockStatusByThem: (userId: string, isBlockedByThem: boolean) => void;
 
   // Thunks
   fetchConversations: () => Promise<void>;
@@ -217,6 +219,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   }),
 
   setSelectedConversationId: (id) => set({ selectedConversationId: id }),
+
+  updateConversationBlockStatus: (conversationId, isBlockedByMe) => set(state => ({
+    conversations: state.conversations.map((c) =>
+      c.id === conversationId ? { ...c, isBlockedByMe } : c
+    )
+  })),
+
+  updateConversationBlockStatusByThem: (userId, isBlockedByThem) => set(state => ({
+    conversations: state.conversations.map((c) => {
+      if (c.participants.some(p => p.userId === userId)) {
+        const updatedParticipants = c.participants.map(p => {
+          if (p.userId === userId) {
+            return {
+              ...p,
+              user: {
+                ...p.user,
+                avatarUrl: isBlockedByThem ? null : p.user.avatarUrl,
+                profilePhotoUrl: isBlockedByThem ? null : p.user.profilePhotoUrl,
+                status: isBlockedByThem ? "OFFLINE" : p.user.status,
+                lastSeen: isBlockedByThem ? undefined : p.user.lastSeen
+              }
+            };
+          }
+          return p;
+        });
+        return { ...c, participants: updatedParticipants, isBlockedByThem };
+      }
+      return c;
+    })
+  })),
 
   updateUserPresence: (userId, status, lastSeen) => set((state) => ({
     userPresence: { ...state.userPresence, [userId]: { status, lastSeen } },

@@ -271,22 +271,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Check block status whenever conversation changes
   useEffect(() => {
     if (!conversation) return;
-    const otherParticipant = conversation.participants.find(p => p.userId !== currentUserId) || conversation.participants[0];
-    if (!otherParticipant) return;
-    
-    const checkBlockStatus = async () => {
-      try {
-        const res = await api.get('/users/me/blocked');
-        if (res.data?.data) {
-          const blockedList = res.data.data;
-          setIsBlocked(blockedList.some((u: any) => u.id === otherParticipant.user.id));
-        }
-      } catch (err) {
-        console.error("Failed to check block status", err);
-      }
-    };
-    checkBlockStatus();
-  }, [conversation, currentUserId]);
+    setIsBlocked(!!conversation.isBlockedByMe);
+  }, [conversation]);
+
+  const { 
+    userPresence, 
+    sendMessage, 
+    hasMoreMessages, 
+    cursors, 
+    isFetchingMore, 
+    fetchMessages,
+    addMessage,
+    hasFetchedHistory,
+    firstItemIndex: storeFirstItemIndex,
+    updateConversationBlockStatus
+  } = useChatStore();
 
   const handleBlockToggle = async () => {
     if (!conversation) return;
@@ -299,9 +298,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       if (isBlocked) {
         await api.delete(`/users/me/block/${targetUserId}`);
         setIsBlocked(false);
+        updateConversationBlockStatus(conversation.id, false);
       } else {
-        await api.post(`/users/me/block`, { userIdToBlock: targetUserId });
+        await api.post(`/users/me/block/${targetUserId}`);
         setIsBlocked(true);
+        updateConversationBlockStatus(conversation.id, true);
       }
     } catch (err) {
       console.error("Failed to toggle block status", err);
@@ -322,18 +323,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setUnreadWhileScrolled(0);
     setIsMenuOpen(false);
   }
-
-  const { 
-    userPresence, 
-    sendMessage, 
-    hasMoreMessages, 
-    cursors, 
-    isFetchingMore, 
-    fetchMessages,
-    addMessage,
-    hasFetchedHistory,
-    firstItemIndex: storeFirstItemIndex
-  } = useChatStore();
   
   const firstItemIndex = conversation ? (storeFirstItemIndex[conversation.id] ?? (1000000 - (messages.length || 0))) : 0;
   
@@ -920,7 +909,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       {/* Input */}
       <div className="p-4 bg-bg-base border-t border-border-subtle shrink-0">
-        {isBlocked ? (
+        {conversation?.isBlockedByThem ? (
+          <div className="flex flex-col items-center justify-center p-4 bg-bg-surface border border-border-subtle rounded-xl">
+            <p className="text-sm text-text-muted font-medium text-center">
+              You cannot send messages to this user.
+            </p>
+          </div>
+        ) : isBlocked ? (
           <div className="flex flex-col items-center justify-center p-4 bg-danger/5 border border-danger/10 rounded-xl">
             <p className="text-sm text-danger font-medium text-center">
               You have blocked this user. Unblock them to send a message.

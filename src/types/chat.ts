@@ -48,4 +48,6 @@ export interface Conversation {
   participants: ConversationParticipant[];
   messages: Message[];
   unreadCount?: number;
+  isBlockedByMe?: boolean;
+  isBlockedByThem?: boolean;
 }

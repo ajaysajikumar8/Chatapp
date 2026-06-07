@@ -83,6 +83,13 @@ export const connectSocket = () => {
   socket.on('typing_stop', ({ conversationId, userId }: { conversationId: string; userId: string }) => {
     useChatStore.getState().setTyping(conversationId, userId, false);
   });
+
+  socket.on('block_status_changed', ({ userId, isBlockedByThem }: { userId: string; isBlockedByThem: boolean }) => {
+    useChatStore.getState().updateConversationBlockStatusByThem(userId, isBlockedByThem);
+    if (!isBlockedByThem) {
+      useChatStore.getState().fetchConversations();
+    }
+  });
 };
 
 export const disconnectSocket = () => {

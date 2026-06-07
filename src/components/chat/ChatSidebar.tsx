@@ -88,9 +88,48 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const [profileStatus, setProfileStatus] = useState<'success' | 'error' | ''>( '');
   const [profileErrorMessage, setProfileErrorMessage] = useState('');
   
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { userPresence, startConversation } = useChatStore();
+  useEffect(() => {
+    if (isLogoutModalOpen) {
+      const focusTimeout = setTimeout(() => {
+        cancelRef.current?.focus();
+      }, 50);
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setIsLogoutModalOpen(false);
+          return;
+        }
+        if (e.key === 'Tab') {
+          const focusableElements = [cancelRef.current, confirmRef.current];
+          const first = focusableElements[0];
+          const last = focusableElements[focusableElements.length - 1];
+          if (e.shiftKey) {
+            if (document.activeElement === first) {
+              last?.focus();
+              e.preventDefault();
+            }
+          } else {
+            if (document.activeElement === last) {
+              first?.focus();
+              e.preventDefault();
+            }
+          }
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        clearTimeout(focusTimeout);
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isLogoutModalOpen]);
+
+  const { userPresence, startConversation, updateConversationBlockStatus } = useChatStore();
   const logout = useAuthStore((state) => state.logout);
   const currentUserId = useAuthStore((state) => state.user?.id);
 
@@ -245,6 +284,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     try {
       await api.delete(`/users/me/block/${userIdToUnblock}`);
       setBlockedUsers(prev => prev.filter(u => u.id !== userIdToUnblock));
+      const conv = conversations.find(c => 
+        c.participants.some(p => p.userId === userIdToUnblock)
+      );
+      if (conv) {
+        updateConversationBlockStatus(conv.id, false);
+      }
     } catch (err) {
       console.error("Failed to unblock user", err);
     }
@@ -337,11 +382,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   <Settings className="w-4.5 h-4.5" />
                 </button>
                 <button
-                  onClick={() => {
-                    if (window.confirm("Are you sure you want to sign out?")) {
-                      logout();
-                    }
-                  }}
+                  onClick={() => setIsLogoutModalOpen(true)}
                   className="p-2 text-text-muted hover:text-danger-light hover:bg-bg-surface-hover/50 rounded-lg transition-colors"
                   title="Sign out"
                 >
@@ -724,6 +765,55 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               </div>
 
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {isLogoutModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-bg-base/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-bg-surface border border-border-subtle rounded-2xl p-6 w-full max-w-sm shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-danger to-orange-500"></div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 bg-danger/10 text-danger rounded-xl">
+                  <LogOut className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-text-base">Sign Out</h3>
+              </div>
+              <p className="text-text-muted mb-6 text-sm">
+                Are you sure you want to sign out? You will need to enter your credentials to log back in.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button 
+                  ref={cancelRef}
+                  onClick={() => setIsLogoutModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-text-base hover:text-white hover:bg-bg-surface-hover transition-colors font-medium text-sm"
+                >
+                  Cancel
+                </button>
+                <button 
+                  ref={confirmRef}
+                  onClick={() => {
+                    setIsLogoutModalOpen(false);
+                    logout();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-danger text-white shadow-lg shadow-danger/20 hover:bg-danger-hover transition-colors font-medium text-sm"
+                >
+                  Yes, Sign out
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
