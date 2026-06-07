@@ -34,9 +34,11 @@ export const createConversation = async (req: Request, res: Response) => {
             return sendSuccess(res, "Conversation created successfully", conversation, 201);
         }
         return sendSuccess(res, "Conversation already exists", conversation, 200);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error in createConversation:", error);
-        return sendError(res, "Failed to create conversation", 500);
+        const errorMessage = error.message || "Failed to create conversation";
+        const status = errorMessage.includes("start a conversation") ? 403 : 500;
+        return sendError(res, errorMessage, status);
     }
 };
 
@@ -45,14 +47,15 @@ export const markConversationRead = async (req: Request<{ id: string }>, res: Re
         const userId = req.user!.id;
         const { id: conversationId } = req.params;
 
-        const { otherParticipantIds, readAt } = await markConversationAsRead(conversationId, userId);
+        const { notifiedParticipantIds, readAt } = await markConversationAsRead(conversationId, userId);
 
-        // Emit messages_read to the other participant(s) so they see blue checkmarks
+        // Emit messages_read to eligible other participant(s) so they see blue checkmarks
         // Also emit to the user who read it to clear unread counts on their other devices
         const io = getIO();
-        [...otherParticipantIds, userId].forEach((participantId) => {
+        notifiedParticipantIds.forEach((participantId) => {
             io.to(participantId).emit('messages_read', { conversationId, readBy: userId, readAt });
         });
+        io.to(userId).emit('messages_read', { conversationId, readBy: userId, readAt });
 
         sendSuccess(res, 'Conversation marked as read', null);
     } catch (error) {

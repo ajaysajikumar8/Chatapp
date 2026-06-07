@@ -85,7 +85,19 @@ export const getMessagesByConversationId = async (conversationId: string, userId
         return msg;
     }));
 
-    const messagesMapped = messagesWithPresignedUrls.map(flattenMessageSender);
+    const blocks = await prisma.block.findMany({
+        where: { blockedId: userId }
+    });
+    const blockingMeUserIds = new Set(blocks.map(b => b.blockerId));
+
+    const messagesMapped = messagesWithPresignedUrls.map(msg => {
+        const flattened = flattenMessageSender(msg);
+        if (flattened.sender && blockingMeUserIds.has(flattened.sender.id)) {
+            flattened.sender.profilePhotoUrl = null;
+            flattened.sender.avatarUrl = null;
+        }
+        return flattened;
+    });
 
     return {
         messages: messagesMapped,
@@ -184,7 +196,7 @@ export const createMessage = async (
         });
 
         if (blockExists) {
-            throw new Error("Cannot send messages. One of the users has blocked the other.");
+            throw new Error("You cannot send messages to this user.");
         }
     }
 
@@ -238,7 +250,7 @@ export const sendDirectMessageService = async (
     });
 
     if (blockExists) {
-        throw new Error("Cannot send messages. One of the users has blocked the other.");
+        throw new Error("You cannot send messages to this user.");
     }
 
     // 1. Get or create the conversation (sender is guaranteed to be a participant)

@@ -43,7 +43,20 @@ export const initSocket = (server: HTTPServer) => {
                 where: { userId },
                 data: { status: "ONLINE" }
             });
-            io.emit("user_presence_changed", { userId, status: "ONLINE" });
+            const blocks = await prisma.block.findMany({
+                where: {
+                    OR: [
+                        { blockerId: userId },
+                        { blockedId: userId }
+                    ]
+                },
+                select: {
+                    blockerId: true,
+                    blockedId: true
+                }
+            });
+            const excludedRooms = blocks.map(b => b.blockerId === userId ? b.blockedId : b.blockerId);
+            io.except(excludedRooms).emit("user_presence_changed", { userId, status: "ONLINE" });
         } catch (error) {
             console.error("Error updating user presence to ONLINE:", error);
         }
@@ -61,7 +74,20 @@ export const initSocket = (server: HTTPServer) => {
                         where: { userId },
                         data: { status: "OFFLINE", lastSeen }
                     });
-                    io.emit("user_presence_changed", { userId, status: "OFFLINE", lastSeen });
+                    const blocks = await prisma.block.findMany({
+                        where: {
+                            OR: [
+                                { blockerId: userId },
+                                { blockedId: userId }
+                            ]
+                        },
+                        select: {
+                            blockerId: true,
+                            blockedId: true
+                        }
+                    });
+                    const excludedRooms = blocks.map(b => b.blockerId === userId ? b.blockedId : b.blockerId);
+                    io.except(excludedRooms).emit("user_presence_changed", { userId, status: "OFFLINE", lastSeen });
                 } catch (error) {
                     console.error("Error updating user presence to OFFLINE:", error);
                 }
@@ -69,12 +95,40 @@ export const initSocket = (server: HTTPServer) => {
         });
 
         // Typing indicators
-        socket.on("typing_start", ({ conversationId, recipientId }) => {
-            socket.to(recipientId).emit("typing_start", { conversationId, userId });
+        socket.on("typing_start", async ({ conversationId, recipientId }) => {
+            try {
+                const blockExists = await prisma.block.findFirst({
+                    where: {
+                        OR: [
+                            { blockerId: userId, blockedId: recipientId },
+                            { blockerId: recipientId, blockedId: userId }
+                        ]
+                    }
+                });
+                if (!blockExists) {
+                    socket.to(recipientId).emit("typing_start", { conversationId, userId });
+                }
+            } catch (error) {
+                console.error("Error checking block for typing_start:", error);
+            }
         });
 
-        socket.on("typing_stop", ({ conversationId, recipientId }) => {
-            socket.to(recipientId).emit("typing_stop", { conversationId, userId });
+        socket.on("typing_stop", async ({ conversationId, recipientId }) => {
+            try {
+                const blockExists = await prisma.block.findFirst({
+                    where: {
+                        OR: [
+                            { blockerId: userId, blockedId: recipientId },
+                            { blockerId: recipientId, blockedId: userId }
+                        ]
+                    }
+                });
+                if (!blockExists) {
+                    socket.to(recipientId).emit("typing_stop", { conversationId, userId });
+                }
+            } catch (error) {
+                console.error("Error checking block for typing_stop:", error);
+            }
         });
     });
 

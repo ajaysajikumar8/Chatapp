@@ -23,6 +23,11 @@ export const getConversationsForUser = async (userId: string) => {
                                     lastSeen: true,
                                     profilePhotoUrl: true,
                                 }
+                            },
+                            settings: {
+                                select: {
+                                    readReceiptsEnabled: true,
+                                }
                             }
                         },
                     },
@@ -51,10 +56,44 @@ export const getConversationsForUser = async (userId: string) => {
         unreadCountsRaw.map(row => [row.conversation_id, Number(row.count)])
     );
 
+    // Fetch active blocks for the user to determine block status per conversation
+    const blocks = await prisma.block.findMany({
+        where: {
+            OR: [
+                { blockerId: userId },
+                { blockedId: userId }
+            ]
+        }
+    });
+
+    const blockedByUserIds = new Set(blocks.filter(b => b.blockerId === userId).map(b => b.blockedId));
+    const blockingUserIds = new Set(blocks.filter(b => b.blockedId === userId).map(b => b.blockerId));
+
     const conversationsMapped = await Promise.all(conversations.map(async conv => {
+        const otherParticipant = conv.participants.find(p => p.userId !== userId);
+        const otherUserId = otherParticipant ? otherParticipant.userId : userId;
+        const isBlockedByMe = blockedByUserIds.has(otherUserId);
+        const isBlockedByThem = blockingUserIds.has(otherUserId);
+
+        const myParticipant = conv.participants.find(p => p.userId === userId);
+        const myReadReceiptsEnabled = myParticipant?.user?.settings?.readReceiptsEnabled ?? true;
+
         const flattenedParticipants = await Promise.all(conv.participants.map(async p => {
             const flattened = flattenParticipantUser(p);
-            if (flattened.user?.profilePhotoUrl) {
+            if (p.userId !== userId) {
+                const otherReadReceiptsEnabled = p.user?.settings?.readReceiptsEnabled ?? true;
+                if (!myReadReceiptsEnabled || !otherReadReceiptsEnabled) {
+                    flattened.lastReadAt = null;
+                }
+            }
+            if (p.userId !== userId && isBlockedByThem) {
+                if (flattened.user) {
+                    flattened.user.profilePhotoUrl = null;
+                    flattened.user.avatarUrl = null;
+                    flattened.user.status = "OFFLINE";
+                    flattened.user.lastSeen = null;
+                }
+            } else if (flattened.user?.profilePhotoUrl) {
                 try {
                     flattened.user.avatarUrl = await generatePresignedDownloadUrl(flattened.user.profilePhotoUrl);
                 } catch (err) {
@@ -63,10 +102,13 @@ export const getConversationsForUser = async (userId: string) => {
             }
             return flattened;
         }));
+
         return {
             ...conv,
             participants: flattenedParticipants,
-            unreadCount: unreadCountsMap.get(conv.id) || 0
+            unreadCount: unreadCountsMap.get(conv.id) || 0,
+            isBlockedByMe,
+            isBlockedByThem
         };
     }));
 
@@ -112,6 +154,11 @@ export const createConversationService = async (
                                 lastSeen: true,
                                 profilePhotoUrl: true,
                             }
+                        },
+                        settings: {
+                            select: {
+                                readReceiptsEnabled: true,
+                            }
                         }
                     },
                 },
@@ -152,9 +199,37 @@ export const createConversationService = async (
     );
 
     if (exactMatch) {
+        // Check if block exists
+        const blocks = await prisma.block.findMany({
+            where: {
+                OR: [
+                    { blockerId: currentUserId, blockedId: participantId },
+                    { blockerId: participantId, blockedId: currentUserId }
+                ]
+            }
+        });
+        const isBlockedByMe = blocks.some(b => b.blockerId === currentUserId);
+        const isBlockedByThem = blocks.some(b => b.blockerId === participantId);
+
+        const myParticipant = exactMatch.participants.find(p => p.userId === currentUserId);
+        const myReadReceiptsEnabled = myParticipant?.user?.settings?.readReceiptsEnabled ?? true;
+
         const flattenedParticipants = await Promise.all(exactMatch.participants.map(async p => {
             const flattened = flattenParticipantUser(p);
-            if (flattened.user?.profilePhotoUrl) {
+            if (p.userId !== currentUserId) {
+                const otherReadReceiptsEnabled = p.user?.settings?.readReceiptsEnabled ?? true;
+                if (!myReadReceiptsEnabled || !otherReadReceiptsEnabled) {
+                    flattened.lastReadAt = null;
+                }
+            }
+            if (p.userId !== currentUserId && isBlockedByThem) {
+                if (flattened.user) {
+                    flattened.user.profilePhotoUrl = null;
+                    flattened.user.avatarUrl = null;
+                    flattened.user.status = "OFFLINE";
+                    flattened.user.lastSeen = null;
+                }
+            } else if (flattened.user?.profilePhotoUrl) {
                 try {
                     flattened.user.avatarUrl = await generatePresignedDownloadUrl(flattened.user.profilePhotoUrl);
                 } catch (err) {
@@ -163,13 +238,31 @@ export const createConversationService = async (
             }
             return flattened;
         }));
+
         return { 
             conversation: {
                 ...exactMatch,
-                participants: flattenedParticipants
+                participants: flattenedParticipants,
+                isBlockedByMe,
+                isBlockedByThem
             }, 
             isNew: false 
         };
+    }
+
+    // No existing conversation. Check if either user has blocked the other.
+    if (!isSelfConversation) {
+        const blockExists = await prisma.block.findFirst({
+            where: {
+                OR: [
+                    { blockerId: currentUserId, blockedId: participantId },
+                    { blockerId: participantId, blockedId: currentUserId }
+                ]
+            }
+        });
+        if (blockExists) {
+            throw new Error("You cannot start a conversation with this user.");
+        }
     }
 
     const participantData = isSelfConversation
@@ -185,8 +278,17 @@ export const createConversationService = async (
         include: includeQuery,
     });
 
+    const myParticipant = newConversation.participants.find(p => p.userId === currentUserId);
+    const myReadReceiptsEnabled = myParticipant?.user?.settings?.readReceiptsEnabled ?? true;
+
     const flattenedParticipants = await Promise.all(newConversation.participants.map(async p => {
         const flattened = flattenParticipantUser(p);
+        if (p.userId !== currentUserId) {
+            const otherReadReceiptsEnabled = p.user?.settings?.readReceiptsEnabled ?? true;
+            if (!myReadReceiptsEnabled || !otherReadReceiptsEnabled) {
+                flattened.lastReadAt = null;
+            }
+        }
         if (flattened.user?.profilePhotoUrl) {
             try {
                 flattened.user.avatarUrl = await generatePresignedDownloadUrl(flattened.user.profilePhotoUrl);
@@ -200,7 +302,9 @@ export const createConversationService = async (
     return { 
         conversation: {
             ...newConversation,
-            participants: flattenedParticipants
+            participants: flattenedParticipants,
+            isBlockedByMe: false,
+            isBlockedByThem: false
         }, 
         isNew: true 
     };
@@ -217,12 +321,30 @@ export const markConversationAsRead = async (conversationId: string, userId: str
     // Notify the other participant(s) so they can show blue read checkmarks
     const participants = await prisma.conversationParticipant.findMany({
         where: { conversationId },
+        include: {
+            user: {
+                select: {
+                    settings: {
+                        select: {
+                            readReceiptsEnabled: true
+                        }
+                    }
+                }
+            }
+        }
     });
 
+    const readerParticipant = participants.find((p) => p.userId === userId);
+    const readerReadReceiptsEnabled = readerParticipant?.user?.settings?.readReceiptsEnabled ?? true;
+
+    const notifiedParticipantIds = readerReadReceiptsEnabled
+        ? participants
+            .filter((p) => p.userId !== userId && (p.user?.settings?.readReceiptsEnabled ?? true))
+            .map((p) => p.userId)
+        : [];
+
     return {
-        otherParticipantIds: participants
-            .filter((p) => p.userId !== userId)
-            .map((p) => p.userId),
+        notifiedParticipantIds,
         readAt: readAt.toISOString(),
     };
 };

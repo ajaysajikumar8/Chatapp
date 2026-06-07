@@ -15,6 +15,7 @@ import {
 } from "../services/storage.service.js";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { getIO } from "../socket/index.js";
 
 export const searchUsers = async (req: Request, res: Response) => {
     try {
@@ -146,6 +147,15 @@ export const blockUserHandler = async (req: Request, res: Response) => {
         }
 
         await blockUser(blockerId, userId);
+
+        try {
+            const io = getIO();
+            io.to(userId).emit("block_status_changed", { userId: blockerId, isBlockedByThem: true });
+            io.to(userId).emit("user_presence_changed", { userId: blockerId, status: "OFFLINE", lastSeen: null });
+        } catch (socketErr) {
+            console.error("Error emitting block socket events:", socketErr);
+        }
+
         return sendSuccess(res, "User blocked successfully", null);
     } catch (error: any) {
         console.error("Error in blockUserHandler:", error);
@@ -165,6 +175,14 @@ export const unblockUserHandler = async (req: Request, res: Response) => {
         }
 
         await unblockUser(blockerId, userId);
+
+        try {
+            const io = getIO();
+            io.to(userId).emit("block_status_changed", { userId: blockerId, isBlockedByThem: false });
+        } catch (socketErr) {
+            console.error("Error emitting unblock socket events:", socketErr);
+        }
+
         return sendSuccess(res, "User unblocked successfully", null);
     } catch (error: any) {
         console.error("Error in unblockUserHandler:", error);
