@@ -34,6 +34,13 @@ export const getConversationsForUser = async (userId: string) => {
                 },
             },
             messages: {
+                where: {
+                    deletedForUsers: {
+                        none: {
+                            userId: userId
+                        }
+                    }
+                },
                 orderBy: { createdAt: 'desc' },
                 take: 1,
             },
@@ -165,6 +172,13 @@ export const createConversationService = async (
             },
         },
         messages: {
+            where: {
+                deletedForUsers: {
+                    none: {
+                        userId: currentUserId,
+                    },
+                },
+            },
             orderBy: {
                 createdAt: "desc" as const,
             },
@@ -388,4 +402,105 @@ export const muteConversationService = async (conversationId: string, userId: st
     });
 
     return participant;
+};
+
+export const getConversationAttachmentsService = async (
+    conversationId: string,
+    userId: string,
+    type: 'media' | 'document',
+    cursor?: string,
+    limit: number = 20
+) => {
+    // Verify user is in conversation
+    const participant = await prisma.conversationParticipant.findUnique({
+        where: {
+            conversationId_userId: {
+                conversationId,
+                userId
+            }
+        }
+    });
+
+    if (!participant) {
+        throw new Error("Unauthorized to access this conversation");
+    }
+
+    const take = limit + 1;
+
+    // Build filter based on type
+    const attachmentFilter: any = {
+        conversationId,
+        attachmentUrl: { not: null }
+    };
+
+    if (type === 'media') {
+        attachmentFilter.OR = [
+            { attachmentType: { startsWith: 'image/' } },
+            { attachmentType: { startsWith: 'video/' } },
+            { attachmentType: { startsWith: 'audio/' } }
+        ];
+    } else {
+        attachmentFilter.NOT = [
+            { attachmentType: { startsWith: 'image/' } },
+            { attachmentType: { startsWith: 'video/' } },
+            { attachmentType: { startsWith: 'audio/' } }
+        ];
+    }
+
+    const messages = await prisma.message.findMany({
+        where: attachmentFilter,
+        include: {
+            sender: {
+                select: {
+                    id: true,
+                    profile: {
+                        select: {
+                            displayName: true
+                        }
+                    }
+                }
+            }
+        },
+        take,
+        ...(cursor && {
+            skip: 1,
+            cursor: { id: cursor }
+        }),
+        orderBy: {
+            createdAt: 'desc'
+        }
+    });
+
+    const hasMore = messages.length > limit;
+    const paginatedMessages = hasMore ? messages.slice(0, limit) : messages;
+
+    const attachments = await Promise.all(paginatedMessages.map(async (msg) => {
+        let signedUrl = "";
+        if (msg.attachmentUrl) {
+            try {
+                signedUrl = await generatePresignedDownloadUrl(msg.attachmentUrl);
+            } catch (err) {
+                console.error(`Failed to sign attachment URL for message ${msg.id}`, err);
+            }
+        }
+        return {
+            messageId: msg.id,
+            attachmentUrl: signedUrl,
+            attachmentType: msg.attachmentType,
+            attachmentName: msg.attachmentName,
+            createdAt: msg.createdAt.toISOString(),
+            sender: msg.sender ? {
+                id: msg.sender.id,
+                displayName: msg.sender.profile?.displayName || "User"
+            } : null
+        };
+    }));
+
+    const nextCursor = hasMore ? paginatedMessages[paginatedMessages.length - 1]?.id : null;
+
+    return {
+        attachments,
+        nextCursor,
+        hasMore
+    };
 };

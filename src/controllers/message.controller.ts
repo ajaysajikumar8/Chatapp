@@ -123,13 +123,14 @@ export const updateMessage = async (req: Request<{ id: string }>, res: Response)
     }
 };
 
-export const deleteMessage = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+export const deleteMessage = async (req: Request<{ id: string }, any, any, { type?: string }>, res: Response): Promise<void> => {
     try {
         const userId = req.user!.id;
         const { id } = req.params;
+        const type = (req.query.type === 'me' ? 'me' : 'everyone') as 'me' | 'everyone';
 
-        await deleteMessageService(id, userId);
-        sendSuccess(res, "Message deleted successfully", null);
+        const result = await deleteMessageService(id, userId, type);
+        sendSuccess(res, "Message deleted successfully", result);
     } catch (error: any) {
         console.error("Error in deleteMessage:", error);
         sendError(res, error.message || 'Failed to delete message', error.message?.includes('Unauthorized') ? 403 : 400);

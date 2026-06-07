@@ -8,7 +8,8 @@ import {
     completeAvatarUpload,
     blockUserHandler,
     unblockUserHandler,
-    getBlockedUsersHandler
+    getBlockedUsersHandler,
+    getUserProfileHandler
 } from "../controllers/user.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import rateLimit from "express-rate-limit";
@@ -30,6 +31,7 @@ router.get("/", searchRateLimiter, searchUsers);
 
 // Profile & Settings
 router.get("/me", getMyProfile);
+router.get("/:userId/profile", getUserProfileHandler);
 router.put("/me/profile", updateMyProfile);
 router.put("/me/settings", updateMySettings);
 router.post("/me/avatar-upload", requestAvatarUpload);

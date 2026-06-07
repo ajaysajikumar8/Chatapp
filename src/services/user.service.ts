@@ -236,3 +236,80 @@ export const getBlockedUsers = async (blockerId: string) => {
         };
     }));
 };
+
+export const getTargetUserProfile = async (currentUserId: string, targetUserId: string) => {
+    const targetUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        include: {
+            profile: true,
+            settings: true
+        }
+    });
+
+    if (!targetUser) {
+        throw new Error("User not found");
+    }
+
+    const blocks = await prisma.block.findMany({
+        where: {
+            OR: [
+                { blockerId: currentUserId, blockedId: targetUserId },
+                { blockerId: targetUserId, blockedId: currentUserId }
+            ]
+        }
+    });
+
+    const isBlockedByMe = blocks.some(b => b.blockerId === currentUserId);
+    const isBlockedByThem = blocks.some(b => b.blockerId === targetUserId);
+
+    // Check if they share a conversation (contacts by definition)
+    const sharedConversation = await prisma.conversation.findFirst({
+        where: {
+            AND: [
+                { participants: { some: { userId: currentUserId } } },
+                { participants: { some: { userId: targetUserId } } }
+            ]
+        }
+    });
+    const isContact = !!sharedConversation;
+
+    let avatarUrl = null;
+    let status = "OFFLINE";
+    let lastSeen: Date | null = null;
+    let bio: string | null = null;
+
+    if (!isBlockedByMe && !isBlockedByThem) {
+        bio = targetUser.profile?.bio || "";
+
+        // Profile Photo Visibility
+        const photoVis = targetUser.settings?.profilePhotoVisibility ?? "EVERYONE";
+        const canSeePhoto = photoVis === "EVERYONE" || (photoVis === "CONTACTS" && isContact);
+        if (canSeePhoto && targetUser.profile?.profilePhotoUrl) {
+            try {
+                avatarUrl = await generatePresignedDownloadUrl(targetUser.profile.profilePhotoUrl);
+            } catch (err) {
+                console.error("Error signing target user avatar", err);
+            }
+        }
+
+        // Last Seen Visibility
+        const lastSeenVis = targetUser.settings?.lastSeenVisibility ?? "EVERYONE";
+        const canSeeLastSeen = lastSeenVis === "EVERYONE" || (lastSeenVis === "CONTACTS" && isContact);
+        if (canSeeLastSeen) {
+            status = targetUser.profile?.status || "OFFLINE";
+            lastSeen = targetUser.profile?.lastSeen || null;
+        }
+    }
+
+    return {
+        id: targetUser.id,
+        displayName: targetUser.profile?.displayName || "",
+        username: targetUser.profile?.username || "",
+        bio,
+        avatarUrl,
+        status,
+        lastSeen: lastSeen ? lastSeen.toISOString() : null,
+        isBlockedByMe,
+        isBlockedByThem
+    };
+};

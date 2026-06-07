@@ -2,7 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { getIO } from "../socket/index.js";
 import { createConversationService } from "./conversation.service.js";
 import { sendPushNotification } from "./push.service.js";
-import { generatePresignedDownloadUrl } from "./storage.service.js";
+import { generatePresignedDownloadUrl, deleteFileFromR2 } from "./storage.service.js";
 
 // Helper check to see if user is part of conversation
 export const checkUserInConversation = async (conversationId: string, userId: string) => {
@@ -34,7 +34,14 @@ export const getMessagesByConversationId = async (conversationId: string, userId
     const take = limit + 1;
 
     const messages = await prisma.message.findMany({
-        where: { conversationId },
+        where: { 
+            conversationId,
+            deletedForUsers: {
+                none: {
+                    userId
+                }
+            }
+        },
         include: {
             sender: {
                 select: {
@@ -305,13 +312,28 @@ export const updateMessageService = async (messageId: string, senderId: string, 
         throw new Error("Unauthorized to edit this message");
     }
 
+    if (message.isDeleted) {
+        throw new Error("Cannot edit a deleted message");
+    }
+
+    // Verify time limit (15 minutes)
+    const timeDiff = Date.now() - new Date(message.createdAt).getTime();
+    if (timeDiff > 15 * 60 * 1000) {
+        throw new Error("Edit window has expired (15 minutes)");
+    }
+
     const updatedMessage = await prisma.message.update({
         where: { id: messageId },
-        data: { content },
+        data: { 
+            content,
+            isEdited: true,
+            updatedAt: new Date()
+        },
         include: {
             sender: {
                 select: {
                     id: true,
+                    email: true,
                     profile: {
                         select: {
                             displayName: true,
@@ -338,7 +360,7 @@ export const updateMessageService = async (messageId: string, senderId: string, 
     return flattened;
 };
 
-export const deleteMessageService = async (messageId: string, senderId: string) => {
+export const deleteMessageService = async (messageId: string, userId: string, type: 'me' | 'everyone' = 'everyone') => {
     const message = await prisma.message.findUnique({
         where: { id: messageId },
     });
@@ -347,24 +369,85 @@ export const deleteMessageService = async (messageId: string, senderId: string) 
         throw new Error("Message not found");
     }
 
-    if (message.senderId !== senderId) {
-        throw new Error("Unauthorized to delete this message");
+    if (type === 'everyone') {
+        if (message.senderId !== userId) {
+            throw new Error("Unauthorized to delete this message for everyone");
+        }
+
+        // Verify delete window limit (24 hours)
+        const timeDiff = Date.now() - new Date(message.createdAt).getTime();
+        if (timeDiff > 24 * 60 * 60 * 1000) {
+            throw new Error("Delete for everyone window has expired (24 hours)");
+        }
+
+        // If message has an attachment, delete it from R2 storage
+        if (message.attachmentUrl) {
+            try {
+                await deleteFileFromR2(message.attachmentUrl);
+            } catch (err) {
+                console.error("Failed to delete attachment file from R2:", err);
+            }
+        }
+
+        const updatedMessage = await prisma.message.update({
+            where: { id: messageId },
+            data: {
+                content: "This message was deleted",
+                isDeleted: true,
+                attachmentUrl: null,
+                attachmentType: null,
+                attachmentName: null,
+                updatedAt: new Date()
+            },
+            include: {
+                sender: {
+                    select: {
+                        id: true,
+                        email: true,
+                        profile: {
+                            select: {
+                                displayName: true,
+                                username: true,
+                                profilePhotoUrl: true,
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const flattened = flattenMessageSender(updatedMessage);
+
+        const participants = await prisma.conversationParticipant.findMany({
+            where: { conversationId: message.conversationId }
+        });
+        
+        const io = getIO();
+        participants.forEach((p) => {
+            io.to(p.userId).emit("message_updated", flattened);
+        });
+
+        return flattened;
+    } else {
+        // Delete for me
+        const isParticipant = await checkUserInConversation(message.conversationId, userId);
+        if (!isParticipant) {
+            throw new Error("Unauthorized to access this conversation");
+        }
+
+        await prisma.userDeletedMessage.create({
+            data: {
+                userId,
+                messageId
+            }
+        });
+
+        // Emit to user's other sessions to keep UI synchronized across tabs
+        const io = getIO();
+        io.to(userId).emit("message_deleted_for_me", { messageId, conversationId: message.conversationId });
+
+        return true;
     }
-
-    await prisma.message.delete({
-        where: { id: messageId },
-    });
-
-    const participants = await prisma.conversationParticipant.findMany({
-        where: { conversationId: message.conversationId }
-    });
-    
-    const io = getIO();
-    participants.forEach((p) => {
-        io.to(p.userId).emit("message_deleted", { messageId, conversationId: message.conversationId });
-    });
-
-    return true;
 };
 
 export const getMessageAttachmentUrlService = async (messageId: string, userId: string): Promise<string> => {

@@ -6,7 +6,8 @@ import {
     updateUserSettings, 
     blockUser, 
     unblockUser, 
-    getBlockedUsers 
+    getBlockedUsers,
+    getTargetUserProfile
 } from "../services/user.service.js";
 import { 
     generatePresignedAvatarUploadUrl, 
@@ -201,5 +202,25 @@ export const getBlockedUsersHandler = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error("Error in getBlockedUsersHandler:", error);
         return sendError(res, "Failed to retrieve blocked users list", 500);
+    }
+};
+
+export const getUserProfileHandler = async (req: Request, res: Response) => {
+    try {
+        const currentUserId = req.user!.id;
+        const { userId } = req.params;
+
+        if (!userId || typeof userId !== 'string') {
+            return sendError(res, "Invalid user ID", 400);
+        }
+
+        const profile = await getTargetUserProfile(currentUserId, userId);
+        return sendSuccess(res, "User profile retrieved successfully", profile);
+    } catch (error: any) {
+        console.error("Error in getUserProfileHandler:", error);
+        if (error.message === "User not found") {
+            return sendError(res, error.message, 404);
+        }
+        return sendError(res, "Failed to retrieve user profile", 500);
     }
 };

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { getConversationsForUser, createConversationService, markConversationAsRead, muteConversationService } from "../services/conversation.service.js";
+import { getConversationsForUser, createConversationService, markConversationAsRead, muteConversationService, getConversationAttachmentsService } from "../services/conversation.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { getIO } from "../socket/index.js";
 
@@ -87,5 +87,30 @@ export const muteConversation = async (req: Request<{ id: string }>, res: Respon
     } catch (error: any) {
         console.error("Error in muteConversation:", error);
         return sendError(res, error.message || "Failed to update mute status");
+    }
+};
+
+export const getConversationAttachments = async (req: Request<{ id: string }>, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const { id: conversationId } = req.params;
+        const type = req.query.type as string;
+        const cursor = req.query.cursor as string | undefined;
+        const limitStr = req.query.limit as string | undefined;
+
+        if (type !== 'media' && type !== 'document') {
+            return sendError(res, "type query parameter must be 'media' or 'document'", 400);
+        }
+
+        const limit = limitStr ? parseInt(limitStr, 10) : 20;
+
+        const result = await getConversationAttachmentsService(conversationId, userId, type, cursor, limit);
+        return sendSuccess(res, "Shared attachments fetched successfully", result);
+    } catch (error: any) {
+        console.error("Error in getConversationAttachments:", error);
+        if (error.message.includes("Unauthorized")) {
+            return sendError(res, error.message, 403);
+        }
+        return sendError(res, "Failed to fetch shared attachments");
     }
 };
