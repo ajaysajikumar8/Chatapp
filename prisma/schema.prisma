@@ -152,6 +152,7 @@ model Message {
   deletedForUsers UserDeletedMessage[]
 
   @@index([conversationId, createdAt])
+  @@index([conversationId, attachmentUrl, createdAt])
   @@map("messages")
 }
 
