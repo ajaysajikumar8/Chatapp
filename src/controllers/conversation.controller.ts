@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { getConversationsForUser, createConversationService, markConversationAsRead } from "../services/conversation.service.js";
+import { getConversationsForUser, createConversationService, markConversationAsRead, muteConversationService } from "../services/conversation.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { getIO } from "../socket/index.js";
 
@@ -61,5 +61,31 @@ export const markConversationRead = async (req: Request<{ id: string }>, res: Re
     } catch (error) {
         console.error('Error in markConversationRead:', error);
         sendError(res, 'Failed to mark conversation as read');
+    }
+};
+
+export const muteConversation = async (req: Request<{ id: string }>, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const { id: conversationId } = req.params;
+        const { duration } = req.body || {};
+
+        if (!duration || typeof duration !== 'string') {
+            return sendError(res, "duration is required and must be a string", 400);
+        }
+
+        const participant = await muteConversationService(conversationId, userId, duration);
+
+        // Emit conversation_mute_changed to the user room so all active tabs sync immediately
+        const io = getIO();
+        io.to(userId).emit("conversation_mute_changed", {
+            conversationId,
+            mutedUntil: participant.mutedUntil ? participant.mutedUntil.toISOString() : null,
+        });
+
+        return sendSuccess(res, "Conversation mute status updated successfully", participant);
+    } catch (error: any) {
+        console.error("Error in muteConversation:", error);
+        return sendError(res, error.message || "Failed to update mute status");
     }
 };

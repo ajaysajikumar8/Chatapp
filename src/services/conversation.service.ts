@@ -348,3 +348,44 @@ export const markConversationAsRead = async (conversationId: string, userId: str
         readAt: readAt.toISOString(),
     };
 };
+
+export const muteConversationService = async (conversationId: string, userId: string, duration: string) => {
+    let mutedUntil: Date | null = null;
+    const now = Date.now();
+
+    switch (duration) {
+        case "1h":
+            mutedUntil = new Date(now + 60 * 60 * 1000);
+            break;
+        case "8h":
+            mutedUntil = new Date(now + 8 * 60 * 60 * 1000);
+            break;
+        case "24h":
+            mutedUntil = new Date(now + 24 * 60 * 60 * 1000);
+            break;
+        case "7d":
+            mutedUntil = new Date(now + 7 * 24 * 60 * 60 * 1000);
+            break;
+        case "always":
+            mutedUntil = new Date("9999-12-31T23:59:59.999Z");
+            break;
+        case "none":
+        default:
+            mutedUntil = null;
+            break;
+    }
+
+    const participant = await prisma.conversationParticipant.update({
+        where: {
+            conversationId_userId: {
+                conversationId,
+                userId,
+            },
+        },
+        data: {
+            mutedUntil,
+        },
+    });
+
+    return participant;
+};

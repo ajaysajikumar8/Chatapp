@@ -126,14 +126,17 @@ const resolveAttachmentAndBroadcast = async (newMessage: any, conversationId: st
     participants.forEach((p) => {
         io.to(p.userId).emit("new_message", returnedMessage);
         if (p.userId !== senderId) {
-            try {
-                sendPushNotification(p.userId, {
-                    title: `New message from ${newMessage.sender?.displayName}`,
-                    body: newMessage.content,
-                    data: { url: `/chat?chatId=${conversationId}` }
-                });
-            } catch (err) {
-                console.error(`Failed to send push notification to ${p.userId}:`, err);
+            const isMuted = p.mutedUntil && new Date(p.mutedUntil) > new Date();
+            if (!isMuted) {
+                try {
+                    sendPushNotification(p.userId, {
+                        title: `New message from ${newMessage.sender?.displayName}`,
+                        body: newMessage.content,
+                        data: { url: `/chat?chatId=${conversationId}` }
+                    });
+                } catch (err) {
+                    console.error(`Failed to send push notification to ${p.userId}:`, err);
+                }
             }
         }
     });
