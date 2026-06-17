@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  /* Typography */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+
+  /* Semantic Colors */
+  --color-primary: var(--color-indigo-600);
+  --color-primary-hover: var(--color-indigo-500);
+  --color-primary-light: var(--color-indigo-400);
+  
+  --color-danger: var(--color-rose-500);
+  --color-danger-hover: var(--color-rose-600);
+  --color-danger-light: var(--color-rose-400);
+
+  --color-success: var(--color-emerald-500);
+
+  /* Backgrounds & Surfaces */
+  --color-bg-base: var(--color-slate-950);
+  --color-bg-surface: var(--color-slate-900);
+  --color-bg-surface-hover: var(--color-slate-800);
+  
+  /* Borders */
+  --color-border-subtle: var(--color-slate-800);
+  --color-border-light: rgba(255, 255, 255, 0.08);
+  
+  /* Text */
+  --color-text-base: var(--color-slate-200);
+  --color-text-muted: var(--color-slate-400);
+  --color-text-subtle: var(--color-slate-500);
+
+  /* Glassmorphism Variables */
+  --color-surface-glass: rgba(255, 255, 255, 0.05);
+  --color-border-glass: rgba(255, 255, 255, 0.1);
+}
+
+@layer base {
+  body {
+    @apply bg-bg-base text-text-base antialiased;
+    background-image: 
+      radial-gradient(at 0% 0%, oklch(0.3 0.1 260 / 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, oklch(0.3 0.1 300 / 0.15) 0px, transparent 50%);
+  }
+}
+
+.glass-card {
+  @apply backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl;
+}
+
+.input-field {
+  @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none transition-all duration-200 focus:border-primary-light/50 focus:bg-white/10 placeholder:text-text-subtle;
+}
+
+.btn-primary {
+  @apply w-full bg-primary hover:bg-primary-hover text-white font-medium py-3 rounded-xl transition-all duration-200 shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98];
+}
+
+@keyframes bounce-dot {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50% { transform: translateY(-3px); opacity: 1; }
+}
+
+.typing-dot {
+  animation: bounce-dot 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
