@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { generatePresignedDownloadUrl } from "./storage.service.js";
+import { getUserStatus } from "./presence.service.js";
 
 /**
  * Search users by displayName or username.
@@ -296,7 +297,7 @@ export const getTargetUserProfile = async (currentUserId: string, targetUserId: 
         const lastSeenVis = targetUser.settings?.lastSeenVisibility ?? "EVERYONE";
         const canSeeLastSeen = lastSeenVis === "EVERYONE" || (lastSeenVis === "CONTACTS" && isContact);
         if (canSeeLastSeen) {
-            status = targetUser.profile?.status || "OFFLINE";
+            status = await getUserStatus(targetUserId);
             lastSeen = targetUser.profile?.lastSeen || null;
         }
     }

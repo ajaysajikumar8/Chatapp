@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { generatePresignedDownloadUrl } from "./storage.service.js";
+import { getUserStatuses } from "./presence.service.js";
 
 export const getConversationsForUser = async (userId: string) => {
     const conversations = await prisma.conversation.findMany({
@@ -76,6 +77,11 @@ export const getConversationsForUser = async (userId: string) => {
     const blockedByUserIds = new Set(blocks.filter(b => b.blockerId === userId).map(b => b.blockedId));
     const blockingUserIds = new Set(blocks.filter(b => b.blockedId === userId).map(b => b.blockerId));
 
+    const participantUserIds = Array.from(
+        new Set(conversations.flatMap(c => c.participants.map(p => p.userId)))
+    );
+    const presenceMap = await getUserStatuses(participantUserIds);
+
     const conversationsMapped = await Promise.all(conversations.map(async conv => {
         const otherParticipant = conv.participants.find(p => p.userId !== userId);
         const otherUserId = otherParticipant ? otherParticipant.userId : userId;
@@ -86,7 +92,7 @@ export const getConversationsForUser = async (userId: string) => {
         const myReadReceiptsEnabled = myParticipant?.user?.settings?.readReceiptsEnabled ?? true;
 
         const flattenedParticipants = await Promise.all(conv.participants.map(async p => {
-            const flattened = flattenParticipantUser(p);
+            const flattened = flattenParticipantUser(p, presenceMap);
             if (p.userId !== userId) {
                 const otherReadReceiptsEnabled = p.user?.settings?.readReceiptsEnabled ?? true;
                 if (!myReadReceiptsEnabled || !otherReadReceiptsEnabled) {
@@ -122,17 +128,19 @@ export const getConversationsForUser = async (userId: string) => {
     return conversationsMapped;
 };
 
-const flattenParticipantUser = (participant: any) => {
+const flattenParticipantUser = (participant: any, presenceMap?: Record<string, "ONLINE" | "OFFLINE">) => {
     if (!participant || !participant.user) return participant;
     const userProfile = participant.user.profile;
+    const userId = participant.user.id;
+    const status = presenceMap ? (presenceMap[userId] || "OFFLINE") : (userProfile?.status || "OFFLINE");
     return {
         ...participant,
         user: {
-            id: participant.user.id,
+            id: userId,
             email: participant.user.email,
             displayName: userProfile?.displayName || "",
             username: userProfile?.username || "",
-            status: userProfile?.status || "OFFLINE",
+            status,
             lastSeen: userProfile?.lastSeen || null,
             profilePhotoUrl: userProfile?.profilePhotoUrl || null,
         }
@@ -228,8 +236,11 @@ export const createConversationService = async (
         const myParticipant = exactMatch.participants.find(p => p.userId === currentUserId);
         const myReadReceiptsEnabled = myParticipant?.user?.settings?.readReceiptsEnabled ?? true;
 
+        const participantUserIds = exactMatch.participants.map(p => p.userId);
+        const presenceMap = await getUserStatuses(participantUserIds);
+
         const flattenedParticipants = await Promise.all(exactMatch.participants.map(async p => {
-            const flattened = flattenParticipantUser(p);
+            const flattened = flattenParticipantUser(p, presenceMap);
             if (p.userId !== currentUserId) {
                 const otherReadReceiptsEnabled = p.user?.settings?.readReceiptsEnabled ?? true;
                 if (!myReadReceiptsEnabled || !otherReadReceiptsEnabled) {
@@ -295,8 +306,11 @@ export const createConversationService = async (
     const myParticipant = newConversation.participants.find(p => p.userId === currentUserId);
     const myReadReceiptsEnabled = myParticipant?.user?.settings?.readReceiptsEnabled ?? true;
 
+    const participantUserIds = newConversation.participants.map(p => p.userId);
+    const presenceMap = await getUserStatuses(participantUserIds);
+
     const flattenedParticipants = await Promise.all(newConversation.participants.map(async p => {
-        const flattened = flattenParticipantUser(p);
+        const flattened = flattenParticipantUser(p, presenceMap);
         if (p.userId !== currentUserId) {
             const otherReadReceiptsEnabled = p.user?.settings?.readReceiptsEnabled ?? true;
             if (!myReadReceiptsEnabled || !otherReadReceiptsEnabled) {
