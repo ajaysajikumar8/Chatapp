@@ -1,0 +1,94 @@
+# Backend System Architecture
+
+This document covers the backend system design, database schema, and development roadmap.
+
+## 1. System Overview
+
+The backend is a real-time messaging server built around a REST + WebSocket hybrid model.
+
+```
+                      ┌──────────────────┐
+                      │   React App      │
+                      └────────┬─────────┘
+                               │
+               ┌───────────────┴───────────────┐
+        ┌──────▼──────┐                 ┌──────▼──────┐
+        │ REST (HTTP) │                 │  WebSocket  │
+        └──────┬──────┘                 └──────┬──────┘
+               │                               │
+        ┌──────▼──────┐                 ┌──────▼──────┐
+        │ Express APIs│                 │  Socket.io  │
+        └──────┬──────┘                 └──────┬──────┘
+               │                               │
+        ┌──────▼───────────────────────────────▼──────┐
+        │                  PostgreSQL                 │
+        │               (via Prisma ORM)              │
+        └─────────────────────────────────────────────┘
+```
+
+## 2. Key Design Decisions
+
+### Hybrid Communication
+**Why Socket.io over raw WebSockets?**  
+Automatic reconnection, room management, and fallback transports significantly reduce boilerplate. Can be replaced with a raw WS layer later if needed.
+
+### Database
+**Why Prisma?**  
+Type-safe queries with migration support. Easy to swap the underlying adapter if moving away from PostgreSQL.
+
+**Message Ordering**  
+Messages are ordered by `created_at` (DB-assigned server timestamp), not client timestamp, to prevent clock skew issues.
+
+### Media Storage
+**Cloudflare R2 (S3-Compatible)**
+To handle media attachments (images, videos, files), we use Cloudflare R2.
+- **Security**: The bucket is kept strictly **private**. We do not use public unguessable URLs.
+- **Upload Flow**: The Node.js backend generates short-lived **Presigned PUT URLs**. The React frontend uploads the file directly to R2, bypassing the Node server to save bandwidth.
+- **Download Flow**: When fetching messages, the backend generates short-lived **Presigned GET URLs** for any attachments, ensuring only authenticated users can view the media and preventing permanent hotlinking.
+
+## 3. Backend Architecture
+
+### Core Layers
+1. **Controllers (`src/controllers/`)**: Handle HTTP in/out. No business logic.
+2. **Services (`src/services/`)**: Core business logic.
+3. **Prisma Client (`src/lib/prisma.ts`)**: Single instance for database access.
+4. **Sockets (`src/sockets/`)**: WebSocket event handlers.
+
+## 4. Development Roadmap
+
+### Phase 1 — Core Messaging System
+Goal: Working 1–1 chat with persistence.
+*   Basic project setup (Express/Prisma)
+*   JWT authentication (register + login)
+*   REST APIs: conversations, message history
+*   Socket.io: send and receive messages
+*   Persist messages to PostgreSQL
+
+### Phase 2 — Reliability & State Handling
+Goal: Behave like a real production system.
+*   Online/offline presence
+*   Typing indicators
+*   Read receipts
+*   Message ordering guarantees
+*   Client reconnect + retry logic
+*   Pagination for message history
+
+### Phase 3 — Feature Expansion & Scalability
+Goal: Feature completeness and horizontal scalability.
+*   Media support (Image/Video/File attachments via local storage or S3)
+*   Redis Pub/Sub for cross-instance message fan-out
+*   Redis for tracking online users
+*   Multiple server instances behind Nginx
+*   DB connection pooling
+
+### Phase 4 — DevOps & Production Readiness
+Goal: Deployable like a real product.
+*   Docker + Docker Compose for local and prod
+*   Environment config separation (`.env`, secrets)
+*   HTTPS via Nginx + Let's Encrypt
+*   Deploy to AWS EC2 / Vercel
+*   Structured logging & Error monitoring
+
+### Phase 5 — Intelligence Layer (Optional)
+*   AI summary of long chat threads
+*   Full-text search with ranking

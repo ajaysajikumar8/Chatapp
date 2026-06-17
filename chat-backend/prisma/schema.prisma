@@ -1,0 +1,183 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PrivacyVisibility {
+  EVERYONE
+  CONTACTS
+  NOBODY
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+model User {
+  id            String                    @id @default(cuid())
+  email         String                    @unique
+  passwordHash  String                    @map("password_hash")
+  accountStatus AccountStatus             @default(ACTIVE) @map("account_status")
+  createdAt     DateTime                  @default(now()) @map("created_at")
+  updatedAt     DateTime                  @updatedAt @map("updated_at")
+  deletedAt     DateTime?                 @map("deleted_at")
+
+  // 1-to-1 Relations
+  profile       UserProfile?
+  settings      UserSettings?
+
+  conversations ConversationParticipant[]
+  messages      Message[]                 @relation("MessageSender")
+  blocksInitiated Block[]                 @relation("BlocksInitiated")
+  blocksReceived  Block[]                 @relation("BlocksReceived")
+  pushSubscriptions PushSubscription[]
+  sessions      Session[]
+  deletedMessages UserDeletedMessage[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id              String      @id @default(cuid())
+  userId          String      @unique @map("user_id")
+  username        String      @unique
+  displayName     String      @map("display_name")
+  profilePhotoUrl String?     @map("profile_photo_url")
+  bio             String?     
+
+  // Real-time Presence
+  status          String      @default("OFFLINE")
+  lastSeen        DateTime?   @map("last_seen")
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserSettings {
+  id                     String            @id @default(cuid())
+  userId                 String            @unique @map("user_id")
+  isDiscoverable         Boolean           @default(true) @map("is_discoverable")
+  readReceiptsEnabled    Boolean           @default(true) @map("read_receipts_enabled")
+  lastSeenVisibility     PrivacyVisibility @default(EVERYONE) @map("last_seen_visibility")
+  profilePhotoVisibility PrivacyVisibility @default(EVERYONE) @map("profile_photo_visibility")
+  notificationsEnabled    Boolean          @default(true) @map("notifications_enabled")
+  notificationSoundEnabled Boolean         @default(true) @map("notification_sound_enabled")
+
+  user                   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  deviceType   String?  @map("device_type")
+  browserName  String?  @map("browser_name")
+  osName       String?  @map("os_name")
+  ipAddress    String?  @map("ip_address")
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  auth      String
+  p256dh    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+}
+
+model Conversation {
+  id           String                    @id @default(cuid())
+  createdAt    DateTime                  @default(now()) @map("created_at")
+  updatedAt    DateTime                  @default(now()) @updatedAt @map("updated_at")
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String       @map("conversation_id")
+  userId         String       @map("user_id")
+  lastReadAt     DateTime     @default(now()) @map("last_read_at")
+  mutedUntil     DateTime?    @map("muted_until")
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+                  
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String       @map("conversation_id")
+  senderId       String?      @map("sender_id")
+  content        String?
+  attachmentUrl  String?      @map("attachment_url")
+  attachmentType String?      @map("attachment_type")
+  attachmentName String?      @map("attachment_name")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime?    @map("updated_at")
+  isEdited       Boolean      @default(false) @map("is_edited")
+  isDeleted      Boolean      @default(false) @map("is_deleted")
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User?        @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  deletedForUsers UserDeletedMessage[]
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, attachmentUrl, createdAt])
+  @@map("messages")
+}
+
+model UserDeletedMessage {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  messageId String   @map("message_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@map("user_deleted_messages")
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker   User     @relation("BlocksInitiated", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+}
