@@ -148,7 +148,7 @@ export const ConversationDetails: React.FC<ConversationDetailsProps> = ({
         setMedia(prev => {
           const combined = isLoadMore ? [...prev, ...attachments] : attachments;
           const seen = new Set<string>();
-          return combined.filter(item => {
+          return combined.filter((item: SharedAttachment) => {
             if (seen.has(item.messageId)) return false;
             seen.add(item.messageId);
             return true;
@@ -160,7 +160,7 @@ export const ConversationDetails: React.FC<ConversationDetailsProps> = ({
         setDocs(prev => {
           const combined = isLoadMore ? [...prev, ...attachments] : attachments;
           const seen = new Set<string>();
-          return combined.filter(item => {
+          return combined.filter((item: SharedAttachment) => {
             if (seen.has(item.messageId)) return false;
             seen.add(item.messageId);
             return true;
@@ -200,7 +200,7 @@ export const ConversationDetails: React.FC<ConversationDetailsProps> = ({
 
   // Delayed displaying of loading indicator to prevent flashing on fast network responses
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     if (isLoadingAttachments) {
       timer = setTimeout(() => {
         setShowLoader(true);
