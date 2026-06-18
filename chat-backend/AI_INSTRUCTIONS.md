@@ -40,5 +40,10 @@ For human-focused system design, APIs, and database migration rules, see the `./
 ---
 
 ## 3. Helpful Pointers
-- **Database schema changes**: Read `./docs/database.md` before generating migrations.
+- **Database schema changes**: Whenever you modify `schema.prisma`, you MUST immediately generate a corresponding migration using `npx prisma migrate dev --name <migration_name>` (pointing to the dev database) to keep the database and migration files in sync. Ensure any container runtimes are rebuilt to pull in the new migrations.
 - **New endpoints**: Ensure they follow the contracts in `./docs/api.md`.
+
+---
+
+## 4. Assistant Constraints
+- **Git Commits**: NEVER perform git commits or run `git commit` commands. Defer all staging and committing to the user.

@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY package*.json prisma.config.js tsconfig.json ./
 COPY prisma ./prisma/
 
 # Install all dependencies (including devDependencies)
@@ -23,7 +23,7 @@ FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY package*.json prisma.config.js ./
 COPY prisma ./prisma/
 
 # Install only production dependencies
