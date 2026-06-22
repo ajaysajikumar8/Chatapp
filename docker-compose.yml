@@ -25,13 +25,12 @@ services:
     build:
       context: ./chat-backend
       dockerfile: Dockerfile
-    container_name: chat-backend
     restart: always
     depends_on:
-      - postgres
-      - redis
-    ports:
-      - "3000:3000"
+      db-migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     environment:
       - PORT=3000
       - NODE_ENV=production
@@ -46,19 +45,40 @@ services:
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
-    command: >
-      sh -c "npx prisma migrate deploy && node dist/server.js"
+    command: node dist/server.js
+
+  db-migrations:
+    build:
+      context: ./chat-backend
+      dockerfile: Dockerfile
+    container_name: chat-db-migrations
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    command: npx prisma migrate deploy
 
   frontend:
     build:
       context: ./chat-frontend
       dockerfile: Dockerfile
-    container_name: chat-frontend
+      args:
+        - VITE_API_URL=http://localhost:8080/api
     restart: always
     depends_on:
       - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: chat-load-balancer
+    restart: always
+    depends_on:
+      - backend
+      - frontend
     ports:
       - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro,z
 
 volumes:
   pgdata:

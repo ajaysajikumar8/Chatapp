@@ -3,7 +3,7 @@ import type { Server as HTTPServer } from "http";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { verifyToken } from "../utils/jwt.js";
 import { prisma } from "../lib/prisma.js";
-import { pubClient, subClient } from "../lib/redis.js";
+import { pubClient, subClient, isRedisEnabled } from "../lib/redis.js";
 import { setUserOnline, setUserOffline, cleanOrphanedSockets } from "../services/presence.service.js";
 
 let io: SocketIOServer;
@@ -17,7 +17,12 @@ export const initSocket = (server: HTTPServer) => {
     });
 
     // Attach Redis Adapter for multi-instance socket scaling
-    io.adapter(createAdapter(pubClient, subClient));
+    if (isRedisEnabled && pubClient && subClient) {
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log("Attached Redis Adapter for multi-instance Socket.IO scaling.");
+    } else {
+        console.log("Redis is disabled or unavailable. Using default in-memory Socket.IO adapter.");
+    }
 
     // Run cleanup for any stale socket connections recorded for this server instance
     cleanOrphanedSockets().catch((err) => console.error("Error cleaning orphaned sockets:", err));
