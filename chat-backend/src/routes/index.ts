@@ -16,4 +16,9 @@ router.use('/conversations', conversationRoutes);
 router.use('/users', userRoutes);
 router.use('/push', pushRoutes);
 
+// Health check endpoint for frontend cold-start detection
+router.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK' });
+});
+
 export default router;

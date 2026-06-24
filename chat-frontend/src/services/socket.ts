@@ -7,6 +7,18 @@ const SOCKET_URL = import.meta.env.VITE_API_URL
 
 let socket: Socket | null = null;
 
+type ConnectionListener = (connected: boolean) => void;
+const connectionListeners = new Set<ConnectionListener>();
+
+export const addConnectionListener = (listener: ConnectionListener) => {
+  connectionListeners.add(listener);
+  // Call immediately with current status
+  listener(socket ? socket.connected : false);
+  return () => {
+    connectionListeners.delete(listener);
+  };
+};
+
 export const connectSocket = () => {
   if (socket) return;
 
@@ -26,10 +38,12 @@ export const connectSocket = () => {
 
   socket.on('connect', () => {
     console.log('Socket connected:', socket?.id);
+    connectionListeners.forEach((l) => l(true));
   });
 
   socket.on('disconnect', () => {
     console.log('Socket disconnected');
+    connectionListeners.forEach((l) => l(false));
   });
 
   socket.on('new_message', (message) => {
@@ -106,6 +120,7 @@ export const disconnectSocket = () => {
   if (socket) {
     socket.disconnect();
     socket = null;
+    connectionListeners.forEach((l) => l(false));
   }
 };
 
