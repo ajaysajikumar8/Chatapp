@@ -1,11 +1,10 @@
 import webpush from 'web-push';
 import { prisma } from '../lib/prisma.js';
-import dotenv from 'dotenv';
-dotenv.config();
+import "../lib/env.js";
 
 webpush.setVapidDetails(
     process.env.VAPID_SUBJECT || 'mailto:test@example.com',
-    process.env.VAPID_PUBLIC_KEY || '',
+    process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY || '',
     process.env.VAPID_PRIVATE_KEY || ''
 );
 

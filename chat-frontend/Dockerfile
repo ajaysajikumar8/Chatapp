@@ -9,9 +9,12 @@ RUN npm ci
 
 COPY . .
 
-# Inject build argument for Vite API URL
+# Inject build arguments for Vite configuration
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+
+ARG VITE_VAPID_PUBLIC_KEY
+ENV VITE_VAPID_PUBLIC_KEY=$VITE_VAPID_PUBLIC_KEY
 
 # Build Vite app
 RUN npm run build
