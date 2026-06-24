@@ -35,9 +35,13 @@ COPY --from=builder /usr/src/app/src/generated /usr/src/app/src/generated
 # Copy compiled JS files
 COPY --from=builder /usr/src/app/dist ./dist
 
+# Copy entrypoint script
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 EXPOSE 3000
 
 ENV NODE_ENV=production
 
-# Command to run migrations and start server in production can be set up in compose
+ENTRYPOINT ["./entrypoint.sh"]
 CMD ["node", "dist/server.js"]

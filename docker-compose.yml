@@ -46,6 +46,7 @@ services:
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
       - USE_REDIS=${USE_REDIS}
+      - RUN_MIGRATIONS=false
     command: node dist/server.js
 
   db-migrations:
@@ -57,7 +58,8 @@ services:
       - postgres
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    command: npx prisma migrate deploy
+      - RUN_MIGRATIONS=true
+    command: echo "Migrations completed successfully"
 
   frontend:
     build:
