@@ -178,7 +178,8 @@ export const createMessage = async (
     content: string | undefined,
     attachmentUrl?: string,
     attachmentType?: string,
-    attachmentName?: string
+    attachmentName?: string,
+    attachmentSize?: number
 ) => {
     const isParticipant = await checkUserInConversation(conversationId, senderId);
     if (!isParticipant) {
@@ -217,7 +218,8 @@ export const createMessage = async (
             content: content ?? null,
             attachmentUrl: attachmentUrl ?? null,
             attachmentType: attachmentType ?? null,
-            attachmentName: attachmentName ?? null
+            attachmentName: attachmentName ?? null,
+            attachmentSize: attachmentSize ?? null
         },
         include: {
             sender: {
@@ -247,7 +249,8 @@ export const sendDirectMessageService = async (
     content: string | undefined,
     attachmentUrl?: string,
     attachmentType?: string,
-    attachmentName?: string
+    attachmentName?: string,
+    attachmentSize?: number
 ) => {
     // Check if either user has blocked the other
     const blockExists = await prisma.block.findFirst({
@@ -275,7 +278,8 @@ export const sendDirectMessageService = async (
             content: content ?? null,
             attachmentUrl: attachmentUrl ?? null,
             attachmentType: attachmentType ?? null,
-            attachmentName: attachmentName ?? null
+            attachmentName: attachmentName ?? null,
+            attachmentSize: attachmentSize ?? null
         },
         include: {
             sender: {

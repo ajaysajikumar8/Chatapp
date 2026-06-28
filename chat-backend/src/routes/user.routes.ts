@@ -12,17 +12,9 @@ import {
     getUserProfileHandler
 } from "../controllers/user.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
-import rateLimit from "express-rate-limit";
+import { searchRateLimiter, uploadRateLimiter } from "../middleware/rateLimit.middleware.js";
 
 const router = Router();
-
-const searchRateLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 30, // Limit each IP to 30 requests per `window` (here, per minute)
-    message: "Too many search requests from this IP, please try again after a minute",
-    standardHeaders: true,
-    legacyHeaders: false,
-});
 
 // Protect all user routes
 router.use(authMiddleware);
@@ -34,7 +26,7 @@ router.get("/me", getMyProfile);
 router.get("/:userId/profile", getUserProfileHandler);
 router.put("/me/profile", updateMyProfile);
 router.put("/me/settings", updateMySettings);
-router.post("/me/avatar-upload", requestAvatarUpload);
+router.post("/me/avatar-upload", uploadRateLimiter, requestAvatarUpload);
 router.put("/me/avatar-complete", completeAvatarUpload);
 
 // Block/Safety

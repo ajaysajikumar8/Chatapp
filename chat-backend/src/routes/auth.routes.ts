@@ -4,10 +4,11 @@
 
 import { Router } from 'express';
 import { register, login } from '../controllers/auth.controller.js';
+import { registerRateLimiter, loginRateLimiter } from '../middleware/rateLimit.middleware.js';
 
 const router = Router();
 
-router.post('/register', register);
-router.post('/login', login);
+router.post('/register', registerRateLimiter, register);
+router.post('/login', loginRateLimiter, login);
 
 export default router;

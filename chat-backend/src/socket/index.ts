@@ -5,6 +5,7 @@ import { verifyToken } from "../utils/jwt.js";
 import { prisma } from "../lib/prisma.js";
 import { pubClient, subClient, isRedisEnabled } from "../lib/redis.js";
 import { setUserOnline, setUserOffline, cleanOrphanedSockets } from "../services/presence.service.js";
+import { isProductionSafeguardsEnabled } from "../middleware/rateLimit.middleware.js";
 
 let io: SocketIOServer;
 
@@ -38,6 +39,14 @@ export const initSocket = (server: HTTPServer) => {
         try {
             const decoded = verifyToken(token);
             socket.data.user = decoded; // Store user payload in socket.data
+            
+            if (isProductionSafeguardsEnabled) {
+                const maxConcurrent = process.env.MAX_CONCURRENT_USERS ? parseInt(process.env.MAX_CONCURRENT_USERS, 10) : 20;
+                if (io.engine.clientsCount >= maxConcurrent) {
+                    return next(new Error("Connection limit reached. This demo is currently full. Please try again later."));
+                }
+            }
+
             next();
         } catch (err) {
             return next(new Error("Authentication error: Invalid token"));
@@ -103,6 +112,15 @@ export const initSocket = (server: HTTPServer) => {
 
         // Typing indicators
         socket.on("typing_start", async ({ conversationId, recipientId }) => {
+            const now = Date.now();
+            const lastTyping = socket.data.lastTypingStart || 0;
+            const typingLimit = process.env.TYPING_LIMIT_MS ? parseInt(process.env.TYPING_LIMIT_MS, 10) : 1000;
+            
+            if (isProductionSafeguardsEnabled && now - lastTyping < typingLimit) {
+                return;
+            }
+            socket.data.lastTypingStart = now;
+
             try {
                 const blockExists = await prisma.block.findFirst({
                     where: {
@@ -121,6 +139,15 @@ export const initSocket = (server: HTTPServer) => {
         });
 
         socket.on("typing_stop", async ({ conversationId, recipientId }) => {
+            const now = Date.now();
+            const lastTyping = socket.data.lastTypingStop || 0;
+            const typingLimit = process.env.TYPING_LIMIT_MS ? parseInt(process.env.TYPING_LIMIT_MS, 10) : 1000;
+            
+            if (isProductionSafeguardsEnabled && now - lastTyping < typingLimit) {
+                return;
+            }
+            socket.data.lastTypingStop = now;
+
             try {
                 const blockExists = await prisma.block.findFirst({
                     where: {

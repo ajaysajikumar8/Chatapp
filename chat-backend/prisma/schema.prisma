@@ -143,6 +143,7 @@ model Message {
   attachmentUrl  String?      @map("attachment_url")
   attachmentType String?      @map("attachment_type")
   attachmentName String?      @map("attachment_name")
+  attachmentSize Int?         @map("attachment_size")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime?    @map("updated_at")
   isEdited       Boolean      @default(false) @map("is_edited")

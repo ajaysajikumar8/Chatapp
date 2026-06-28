@@ -3,6 +3,8 @@
 import type { Request, Response } from "express";
 import { registerUser, loginUser } from "../services/auth.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { prisma } from "../lib/prisma.js";
+import { isProductionSafeguardsEnabled } from "../middleware/rateLimit.middleware.js";
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -16,6 +18,19 @@ export const register = async (req: Request, res: Response) => {
         // 🔹 Basic validation
         if (!email || !password || !displayName || !username) {
             return sendError(res, "All fields are required", 400);
+        }
+
+        // 🔹 Check demo user capacity in production
+        if (isProductionSafeguardsEnabled) {
+            const maxUsers = process.env.MAX_TOTAL_USERS ? parseInt(process.env.MAX_TOTAL_USERS, 10) : 50;
+            const userCount = await prisma.user.count();
+            if (userCount >= maxUsers) {
+                return sendError(
+                    res, 
+                    `The public demo has reached its registration capacity (${maxUsers} users). Please try logging in as a guest or contact the administrator.`, 
+                    403
+                );
+            }
         }
 
         const result = await registerUser({ email, password, displayName, username });

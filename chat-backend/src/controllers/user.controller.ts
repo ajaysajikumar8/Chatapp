@@ -17,6 +17,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { getIO } from "../socket/index.js";
+import { isProductionSafeguardsEnabled } from "../middleware/rateLimit.middleware.js";
 
 export const searchUsers = async (req: Request, res: Response) => {
     try {
@@ -93,13 +94,31 @@ export const updateMySettings = async (req: Request, res: Response) => {
 export const requestAvatarUpload = async (req: Request, res: Response) => {
     try {
         const userId = req.user!.id;
-        const { extension, mimeType } = req.body;
+        const { extension, mimeType, fileSize } = req.body;
 
         if (!extension || !mimeType) {
             return sendError(res, "Extension and mimeType are required", 400);
         }
 
-        const data = await generatePresignedAvatarUploadUrl(userId, extension, mimeType);
+
+        // Validate MIME type is ALWAYS checked (all the times)
+        if (!mimeType.toLowerCase().startsWith("image/")) {
+            return sendError(res, "Only image files are allowed for profile avatars.", 400);
+        }
+
+        if (isProductionSafeguardsEnabled) {
+            if (typeof fileSize !== "number") {
+                return sendError(res, "fileSize (number in bytes) is required.", 400);
+            }
+
+            // 1. Validate avatar size (default 2MB)
+            const maxAvatarSize = process.env.MAX_AVATAR_SIZE_BYTES ? parseInt(process.env.MAX_AVATAR_SIZE_BYTES, 10) : 2 * 1024 * 1024;
+            if (fileSize > maxAvatarSize) {
+                return sendError(res, `Avatar photo exceeds the maximum size of ${Math.round(maxAvatarSize / (1024 * 1024))}MB allowed for this public demo.`, 400);
+            }
+        }
+
+        const data = await generatePresignedAvatarUploadUrl(userId, extension, mimeType, isProductionSafeguardsEnabled ? fileSize : undefined);
         return sendSuccess(res, "Presigned upload URL generated successfully", data);
     } catch (error: any) {
         console.error("Error in requestAvatarUpload:", error);

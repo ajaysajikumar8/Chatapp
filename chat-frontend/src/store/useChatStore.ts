@@ -36,7 +36,7 @@ interface ChatState {
   // Thunks
   fetchConversations: () => Promise<void>;
   fetchMessages: (conversationId: string, cursor?: string) => Promise<void>;
-  sendMessage: (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }, optimisticId?: string) => Promise<void>;
+  sendMessage: (conversationId: string, content: string, attachment?: { url: string, type: string, name: string, size?: number }, optimisticId?: string) => Promise<void>;
   startConversation: (user: User) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
   muteConversation: (conversationId: string, duration: string) => Promise<void>;
@@ -368,13 +368,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId: string, content: string, attachment?: { url: string, type: string, name: string }, optimisticId?: string) => {
+  sendMessage: async (conversationId: string, content: string, attachment?: { url: string, type: string, name: string, size?: number }, optimisticId?: string) => {
     try {
       const payload = {
         content,
         attachmentUrl: attachment?.url,
         attachmentType: attachment?.type,
-        attachmentName: attachment?.name
+        attachmentName: attachment?.name,
+        attachmentSize: attachment?.size
       };
 
       if (conversationId.startsWith('temp_')) {

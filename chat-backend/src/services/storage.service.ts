@@ -19,7 +19,7 @@ const s3Client = accountId && accessKeyId && secretAccessKey ? new S3Client({
 /**
  * Generates a presigned URL for the client to directly upload a file to Cloudflare R2.
  */
-export const generatePresignedUploadUrl = async (conversationId: string, fileName: string, mimeType: string): Promise<{ uploadUrl: string, fileKey: string }> => {
+export const generatePresignedUploadUrl = async (conversationId: string, fileName: string, mimeType: string, fileSize?: number): Promise<{ uploadUrl: string, fileKey: string }> => {
     if (!s3Client || !bucketName) {
         throw new Error("R2 is not configured properly.");
     }
@@ -31,6 +31,7 @@ export const generatePresignedUploadUrl = async (conversationId: string, fileNam
         Bucket: bucketName,
         Key: fileKey,
         ContentType: mimeType,
+        ...(fileSize !== undefined ? { ContentLength: fileSize } : {}),
     });
 
     // The URL is valid for 15 minutes
@@ -76,7 +77,7 @@ export const generatePresignedDownloadUrl = async (fileKey: string): Promise<str
 /**
  * Generates a presigned URL for the client to directly upload their profile photo to Cloudflare R2.
  */
-export const generatePresignedAvatarUploadUrl = async (userId: string, extension: string, mimeType: string): Promise<{ uploadUrl: string, fileKey: string }> => {
+export const generatePresignedAvatarUploadUrl = async (userId: string, extension: string, mimeType: string, fileSize?: number): Promise<{ uploadUrl: string, fileKey: string }> => {
     if (!s3Client || !bucketName) {
         throw new Error("R2 is not configured properly.");
     }
@@ -87,6 +88,7 @@ export const generatePresignedAvatarUploadUrl = async (userId: string, extension
         Bucket: bucketName,
         Key: fileKey,
         ContentType: mimeType,
+        ...(fileSize !== undefined ? { ContentLength: fileSize } : {}),
     });
 
     const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 });

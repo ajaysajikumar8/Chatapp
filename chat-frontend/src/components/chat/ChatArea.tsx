@@ -391,13 +391,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     // Run actual upload and send in background
     (async () => {
       try {
-        let attachmentData: { url: string, type: string, name: string } | undefined;
+        let attachmentData: { url: string, type: string, name: string, size?: number } | undefined;
 
         if (tempFile) {
+          // 1. Client-side Max file size: 10MB
+          const MAX_FILE_SIZE = 10 * 1024 * 1024;
+          if (tempFile.size > MAX_FILE_SIZE) {
+            throw new Error(`File is too large. Max size allowed is ${MAX_FILE_SIZE / (1024 * 1024)}MB for this public demo.`);
+          }
+
+          // 2. Client-side File type validation
+          const allowedTypes = [
+            "image/jpeg", "image/png", "image/gif", "image/webp",
+            "video/mp4", "video/quicktime", "video/webm",
+            "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg",
+            "application/pdf", "text/plain"
+          ];
+          if (!allowedTypes.includes(tempFile.type)) {
+            throw new Error("This file type is not supported in the public demo.");
+          }
+
           const presignedRes = await api.post('/messages/presigned-url', {
             conversationId: conversation.id,
             fileName: tempFile.name,
-            mimeType: tempFile.type
+            mimeType: tempFile.type,
+            fileSize: tempFile.size
           });
           const { uploadUrl, fileKey } = presignedRes.data.data;
 
@@ -412,13 +430,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           attachmentData = {
             url: fileKey,
             type: tempFile.type,
-            name: tempFile.name
+            name: tempFile.name,
+            size: tempFile.size
           };
         }
 
         await sendMessage(conversation.id, text, attachmentData, optimisticId);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to send message with attachment:", err);
+        const errMsg = err.response?.data?.message || err.message || "Failed to send message";
+        alert(`Demo Resource Safeguard: ${errMsg}`);
+        
+        if (optimisticId) {
+          useChatStore.getState().replaceOptimisticMessage(conversation.id, optimisticId, {
+            ...optimisticMessage,
+            status: 'error'
+          });
+        }
       }
     })();
   };
@@ -947,7 +975,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           </span>
                           {isMine && (
                             <div className="flex items-center">
-                              {otherParticipant.lastReadAt && new Date(msg.createdAt) <= new Date(otherParticipant.lastReadAt) ? (
+                              {msg.status === 'error' ? (
+                                <span title="Failed to send message">
+                                  <ShieldAlert className="w-[15px] h-[15px] text-[#ef4444] drop-shadow-sm stroke-[2.5]" />
+                                </span>
+                              ) : msg.status === 'sending' ? (
+                                <div className="w-[12px] h-[12px] border-2 border-white/30 border-t-white rounded-full animate-spin mr-[2px]" title="Sending..." />
+                              ) : otherParticipant.lastReadAt && new Date(msg.createdAt) <= new Date(otherParticipant.lastReadAt) ? (
                                 <CheckCheck className="w-[15px] h-[15px] text-[#38bdf8] drop-shadow-sm stroke-[2.5]" />
                               ) : (
                                 <CheckCheck className="w-[15px] h-[15px] opacity-75 stroke-[2.5]" />

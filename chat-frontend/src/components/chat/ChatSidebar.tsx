@@ -236,9 +236,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 2 * 1024 * 1024) {
       setProfileStatus('error');
-      setProfileErrorMessage("Profile photo must be under 5MB");
+      setProfileErrorMessage("Profile photo must be under 2MB for this public demo");
       setTimeout(() => setProfileStatus(''), 4000);
       return;
     }
@@ -249,7 +249,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     setAvatarUploading(true);
     setProfileStatus('');
     try {
-      const presignedRes = await api.post('/users/me/avatar-upload', { extension, mimeType });
+      const presignedRes = await api.post('/users/me/avatar-upload', { extension, mimeType, fileSize: file.size });
       const { uploadUrl, fileKey } = presignedRes.data.data;
 
       await fetch(uploadUrl, {
@@ -273,7 +273,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     } catch (err: any) {
       console.error("Avatar upload failed", err);
       setProfileStatus('error');
-      setProfileErrorMessage("Failed to upload avatar");
+      const errMsg = err.response?.data?.message || "Failed to upload avatar";
+      setProfileErrorMessage(errMsg);
       setTimeout(() => setProfileStatus(''), 4000);
     } finally {
       setAvatarUploading(false);
@@ -603,7 +604,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   className="hidden" 
                 />
                 
-                <p className="text-xs text-text-muted">Click image to upload photo (max 5MB)</p>
+                <p className="text-xs text-text-muted">Click image to upload photo (max 2MB)</p>
               </div>
 
               {/* Edit Details Form */}
