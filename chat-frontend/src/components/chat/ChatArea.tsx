@@ -438,8 +438,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         await sendMessage(conversation.id, text, attachmentData, optimisticId);
       } catch (err: any) {
         console.error("Failed to send message with attachment:", err);
+        
+        const isNetworkError = err.message === "Failed to fetch";
         const errMsg = err.response?.data?.message || err.message || "Failed to send message";
-        alert(`Demo Resource Safeguard: ${errMsg}`);
+        
+        if (isNetworkError) {
+          alert("Unable to upload file. Please check your internet connection and try again.");
+        } else {
+          alert(`Upload Failed: ${errMsg}`);
+        }
         
         if (optimisticId) {
           useChatStore.getState().replaceOptimisticMessage(conversation.id, optimisticId, {
